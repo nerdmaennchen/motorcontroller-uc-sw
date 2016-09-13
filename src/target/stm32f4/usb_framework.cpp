@@ -146,7 +146,7 @@ struct InitHelper : public flawless::Module
 
 		g_usbd_dev = usbd_init(&otgfs_usb_driver, &dev, &config,
 				usb_strings, 3,
-				usbd_control_buffer.data(), usbd_control_buffer.size());
+				usbd_control_buffer.data(), 64);
 
 		usbd_register_set_config_callback(g_usbd_dev, &usb_set_config_callback);
 		nvic_enable_irq(NVIC_OTG_FS_IRQ);

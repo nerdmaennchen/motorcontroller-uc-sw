@@ -44,22 +44,22 @@ flawless::MessageBufferMemory<int, 5> intMsgBuf;
 #define ADC_RESOLUTION (1 << 12)
 
 flawless::MessageBufferMemory<MotorCurrentMeasure, 5> currentMeasurements;
-flawless::MessageBufferMemory<MaxMotorCurrent, 5> currentMeanMeasurements;
+flawless::MessageBufferMemory<MotorCurrent, 5> currentMeanMeasurements;
 
 #define SHUNT_CONDUCTIVITY 20
 #define MIN_ADC_DELAY_US 100000
 
-class MotorCurrent final : public flawless::Module, public flawless::Callback<void>
+class MotorCurrentMeasurer final : public flawless::Module, public flawless::Callback<void>
 {
 	using RawMeasurementType_t = MotorCurrentMeasure;
 public:
-	MotorCurrent(unsigned int level) : flawless::Module(level) {}
+	MotorCurrentMeasurer(unsigned int level) : flawless::Module(level) {}
 
-	virtual ~MotorCurrent() {}
+	virtual ~MotorCurrentMeasurer() {}
 
 	void onDMADone() {
 		auto detailledMsg = flawless::MessageBufferManager<MotorCurrentMeasure>::get().getFreeMessage();
-		auto maxMsg = flawless::MessageBufferManager<MaxMotorCurrent>::get().getFreeMessage();
+		auto maxMsg = flawless::MessageBufferManager<MotorCurrent>::get().getFreeMessage();
 		if (detailledMsg) {
 			float max = 0;
 			Array<uint16_t, SMOOTHING_CNT> const* buffer = &(mRawMeasureBuffer1);
@@ -190,7 +190,7 @@ private:
 } ;
 namespace
 {
-MotorCurrent motorCurrent(8);
+MotorCurrentMeasurer motorCurrent(8);
 }
 
 

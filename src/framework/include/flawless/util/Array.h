@@ -18,6 +18,13 @@ public:
 		return N;
 	}
 
+	T const* begin() const {
+		return &(mElements[0]);
+	}
+	T const* end() const {
+		return &(mElements[N]);
+	}
+
 	T* data() const {
 		return mElements;
 	}

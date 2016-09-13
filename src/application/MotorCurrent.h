@@ -10,4 +10,4 @@ struct MotorCurrentMeasure {
 	Array<float, SMOOTHING_CNT> vals;
 };
 
-using MaxMotorCurrent = float;
+using MotorCurrent = float;

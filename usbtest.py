@@ -45,20 +45,28 @@ def boolify(s):
     if s == 'False':
         return False
     raise ValueError("")
+def customInt(s):
+	if len(s) > 2:
+		if s[0:2] == "0x":
+			return int(s[2:], 16)
+		elif s[0:2] == "0b":
+			return int(s[2:], 2)
+	raise ValueError("")
 def autoconvert(s):
-    for fn in (boolify, int, float):
+    for fn in (boolify, customInt, int, float):
         try:
             return fn(s)
         except:
             pass
     return s
     
-def setConfig(dev, configs, target, values):
+def setConfig(dev, configs, target, values, verbose=True):
 	if target in configs:
 		size = configs[target][1]
 		if size == len(values):
 			dev.write(0x01, st.pack('=BB', 1, configs[target][0]) + values)
-			print("set " + target + " to " + str(values))
+			if verbose:
+				print("set " + target + " to " + str(values))
 		else:
 			print("wrong size!\n expected len: " + str(size) + " got: " + str(len(values)))
 	else:
@@ -120,7 +128,7 @@ if __name__ == "__main__":
 		if len(sys.argv) >= 5:
 			for s in sys.argv[4:]:
 				args.append(autoconvert(s))
-			print(args)
+#			print(args)
 			msg = st.pack(sys.argv[3], *args)
 		setConfig(dev, configs, target, msg)
 		

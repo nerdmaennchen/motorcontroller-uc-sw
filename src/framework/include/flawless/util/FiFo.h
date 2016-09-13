@@ -53,7 +53,7 @@ public:
 		}
 	}
 
-	T const& operator[](size_t idx) {
+	T& operator[](size_t idx) {
 		idx = (mStart + idx) % N;
 		return mStorage[idx];
 	}

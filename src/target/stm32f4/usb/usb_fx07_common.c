@@ -191,15 +191,8 @@ uint16_t stm32fx07_ep_write_packet(usbd_device *usbd_dev, uint8_t addr,
 		return 0;
 	}
 
-	uint16_t numPackets = len / max_packet_len;
-	if (0 != len % max_packet_len) {
-		numPackets += 1;
-	}
-	if (numPackets == 0 || max_packet_len == 0) {
-		numPackets = 1;
-	}
 	/* Enable endpoint for transmission. */
-	REBASE(OTG_DIEPTSIZ(addr)) = /*OTG_FS_DIEPSIZ0_PKTCNT*/ (numPackets << 19) | len;
+	REBASE(OTG_DIEPTSIZ(addr)) = OTG_FS_DIEPSIZ0_PKTCNT | len;
 	REBASE(OTG_DIEPCTL(addr)) |= OTG_FS_DIEPCTL0_EPENA |
 				     OTG_FS_DIEPCTL0_CNAK;
 	volatile uint32_t *fifo = REBASE_FIFO(addr);
@@ -280,21 +273,16 @@ void stm32fx07_poll(usbd_device *usbd_dev)
 		 * This appears to fix a problem where the first 4 bytes
 		 * of the DATA OUT stage of a control transaction are lost.
 		 */
-		for (i = 0; i < 1000; i++) {
-			__asm__("nop");
-		}
+//		for (i = 0; i < 1000; i++) {
+//			__asm__("nop");
+//		}
 
-		if (ep != 0) {
-			__asm__("nop");
-		}
 		if (usbd_dev->user_callback_ctr[ep][type]) {
 			usbd_dev->user_callback_ctr[ep][type] (usbd_dev, ep);
 		}
 
 		/* Discard unread packet data. */
-		for (i = 0; i < usbd_dev->rxbcnt; i += 4) {
-			(void)*REBASE_FIFO(ep);
-		}
+		while ((OTG_FS_GRSTCTL & OTG_FS_GRSTCTL_RXFFLSH) == OTG_FS_GRSTCTL_RXFFLSH);
 
 		usbd_dev->rxbcnt = 0;
 	}

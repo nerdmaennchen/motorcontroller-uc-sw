@@ -17,7 +17,7 @@ protected:
 };
 
 template<typename T>
-class LinkedList : public Singleton<LinkedList<T>>{
+class LinkedList final : public Singleton<LinkedList<T>>{
 public:
 	void add(T* element) {
 		element->mNext = this->mFirst;
