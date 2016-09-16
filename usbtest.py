@@ -7,7 +7,7 @@ import sys
 
 def fetchConfig(dev):
 	dev.write(0x01, st.pack('=B', 1))
-	msg = dev.read(0x81, 64)
+	msg = dev.read(0x81, 64, 1000)
 #	print("reading", msg)
 	headerHelper = st.Struct('=BH')
 	paramHelper = st.Struct('=H')
@@ -18,7 +18,7 @@ def fetchConfig(dev):
 	idx = 0
 	while l > 0:
 		if len(msg) == 0 or not 0 in msg[2:]:
-			msg = msg + dev.read(0x81, 64)
+			msg = msg + dev.read(0x81, 64, 1000)
 #			print("reading", msg)
 		else:
 			while len(msg) != 0 and 0 in msg[2:]:
@@ -80,7 +80,7 @@ def getConfig(dev, configs, target):
 #		print("expecting " + str(size) + " bytes")
 		msg = array('B')
 		while len(msg) < size:
-			msg += dev.read(0x81, 64, 10000)
+			msg += dev.read(0x81, 64, 10)
 #			print(msg)
 		return msg[3:]
 	else:
@@ -116,10 +116,9 @@ if __name__ == "__main__":
 	if len(sys.argv) == 2 and sys.argv[1] == "flush":
 		flush(dev)
 		exit(0)
-		
+	
 	configs = fetchConfig(dev)
-	print(configs)
-
+	
 #format: [progname] set target [formatstr (params)*]
 	if len(sys.argv) >= 3 and sys.argv[1] == "set":
 		target = sys.argv[2]
