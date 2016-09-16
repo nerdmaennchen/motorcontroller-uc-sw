@@ -1,5 +1,6 @@
 
-#include <application/MotorCurrent.h>
+#include "MotorCurrent.h"
+#include "MotorDriver.h"
 
 #include <flawless/module/Module.h>
 
@@ -22,6 +23,7 @@
 #include "interfaces/systemTime.h"
 
 #include <algorithm>
+#include <cmath>
 
 
 namespace
@@ -41,7 +43,7 @@ flawless::MessageBufferMemory<int, 5> intMsgBuf;
 
 #define AUX_TIMER TIM8
 
-#define ADC_RESOLUTION (1 << 12)
+#define ADC_RESOLUTION ((1 << 12) - 1)
 
 flawless::MessageBufferMemory<MotorCurrentMeasure, 5> currentMeasurements;
 flawless::MessageBufferMemory<MotorCurrent, 5> currentMeanMeasurements;
@@ -63,15 +65,21 @@ public:
 		if (detailledMsg) {
 			float max = 0;
 			Array<uint16_t, SMOOTHING_CNT> const* buffer = &(mRawMeasureBuffer1);
-			if (DMA_SCCR(SENSE_DMA, SENSE_DMA_STREAM) & DMA_CR_CT) {
-				buffer = &(mRawMeasureBuffer2);
-			}
+			uint32_t cnt = 0;
 			for (size_t i(0); i < buffer->size(); ++i) {
 				float val = (float((*buffer)[i]) * 3.3f * SHUNT_CONDUCTIVITY / float(ADC_RESOLUTION));
-				max = std::max(val, max);
+				if ((*buffer)[i] > 0) {
+					max += val;
+					++cnt;
+				}
+
 				(*detailledMsg).vals[i] = val;
 			}
-			maxMsg = max;
+			if (cnt > 0) {
+				maxMsg = max / cnt;
+			} else {
+				maxMsg = 0.f;
+			}
 			maxMsg.invokeDirectly<3>();
 			detailledMsg.post<3>();
 		}
@@ -80,7 +88,6 @@ public:
 	void initGPIOs() {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPCEN;
 		RCC_APB2ENR |= RCC_APB2ENR_ADC1EN;
-
 		gpio_mode_setup(SENSE_PORT, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, SENSE_PINS);
 	}
 
@@ -101,7 +108,9 @@ public:
 
 //		ADC_JSQR(SENSE_ADC) = ADC_JSQR_JL_1CHANNELS | (14 << ADC_JSQR_JSQ1_LSB);
 
-		ADC_SMPR1(SENSE_ADC) = (ADC_SMPR_SMP_84CYC << ADC_SMPR1_SMP10_LSB);
+		ADC_SMPR1(SENSE_ADC) =
+				(ADC_SMPR_SMP_3CYC << ADC_SMPR1_SMP10_LSB)
+				| (ADC_SMPR_SMP_3CYC << ADC_SMPR1_SMP11_LSB);
 		ADC_SMPR2(SENSE_ADC) = 0;
 	}
 
@@ -145,7 +154,7 @@ public:
 		TIM_CR1(AUX_TIMER) = 0;
 		TIM_CR2(AUX_TIMER) = 0;
 
-		TIM_PSC(AUX_TIMER) = (0);
+		TIM_PSC(AUX_TIMER) = 1;
 		TIM_ARR(AUX_TIMER) = 0xffff;
 		TIM_CNT(AUX_TIMER) = 0;
 		TIM_SMCR(AUX_TIMER) = TIM_SMCR_TS_ITR2 | TIM_SMCR_SMS_RM;
@@ -153,6 +162,7 @@ public:
 		TIM_CCMR1(AUX_TIMER) = TIM_CCMR1_OC2M_PWM1;
 		TIM_CCER(AUX_TIMER) = TIM_CCER_CC2E;
 
+		TIM_BDTR(AUX_TIMER) |= TIM_BDTR_MOE;
 		TIM_CCR2(AUX_TIMER)  = enableConfig;
 
 		TIM_CR2(AUX_TIMER) |= TIM_CR2_MMS_COMPARE_OC2REF;
@@ -167,7 +177,7 @@ public:
 		TIM_CCR2(AUX_TIMER)  = enableConfig;
 	}
 
-	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", this, 500};
+	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", this, (motordriver::PWM_OFF_TIME+motordriver::PWM_AMPLITUDE)/2};
 
 
 	void init(unsigned int) override {

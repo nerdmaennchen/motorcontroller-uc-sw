@@ -186,13 +186,23 @@ uint16_t stm32fx07_ep_write_packet(usbd_device *usbd_dev, uint8_t addr,
 
 	addr &= 0x7F;
 
+	if (addr != 0 && 0 == len) {
+		len = 0;
+	}
 	/* Return if communication is ongoing. */
 	if (0 != (REBASE(OTG_DIEPTSIZ(addr)) & (0x3ff << 19))) {
 		return 0;
 	}
 
+	uint16_t numPackets = len / max_packet_len;
+	if (len % max_packet_len) {
+		numPackets += 1;
+	}
+	if (numPackets == 0 || max_packet_len == 0) {
+		numPackets = 1;
+	}
 	/* Enable endpoint for transmission. */
-	REBASE(OTG_DIEPTSIZ(addr)) = OTG_FS_DIEPSIZ0_PKTCNT | len;
+	REBASE(OTG_DIEPTSIZ(addr)) = /*OTG_FS_DIEPSIZ0_PKTCNT*/ (numPackets << 19) | len;
 	REBASE(OTG_DIEPCTL(addr)) |= OTG_FS_DIEPCTL0_EPENA |
 				     OTG_FS_DIEPCTL0_CNAK;
 	volatile uint32_t *fifo = REBASE_FIFO(addr);
@@ -216,11 +226,11 @@ uint16_t stm32fx07_ep_read_packet(usbd_device *usbd_dev, uint8_t addr,
 	usbd_dev->rxbcnt -= len;
 
 	volatile uint32_t *fifo = REBASE_FIFO(addr);
-	for (i = len; i >= 4; i -= 4) {
+	for (i = len; i > 0; i -= 4) {
 		*buf32++ = *fifo++;
 	}
 
-	if (i) {
+	if (i > 0) {
 		extra = *fifo++;
 		memcpy(buf32, &extra, i);
 	}
@@ -282,7 +292,9 @@ void stm32fx07_poll(usbd_device *usbd_dev)
 		}
 
 		/* Discard unread packet data. */
-		while ((OTG_FS_GRSTCTL & OTG_FS_GRSTCTL_RXFFLSH) == OTG_FS_GRSTCTL_RXFFLSH);
+		for (i = 0; i < usbd_dev->rxbcnt; i += 4) {
+			(void)*REBASE_FIFO(ep);
+		}
 
 		usbd_dev->rxbcnt = 0;
 	}
@@ -297,7 +309,7 @@ void stm32fx07_poll(usbd_device *usbd_dev)
 			if (usbd_dev->user_callback_ctr[i]
 						       [USB_TRANSACTION_IN]) {
 				usbd_dev->user_callback_ctr[i]
-					[USB_TRANSACTION_IN](usbd_dev, i);
+					[USB_TRANSACTION_IN](usbd_dev, 0x80|i);
 			}
 
 			REBASE(OTG_DIEPINT(i)) = OTG_FS_DIEPINTX_XFRC;

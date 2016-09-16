@@ -68,20 +68,25 @@ public:
 				(*packet).iface = this;
 				packet.post<MSG_ID_INCOMMING_PACKET>();
 			} else {
+				flawless::MessageBufferManager<flawless::Packet_>::get().getFreeMessage();
 				// discard this message
 				uint8_t dummyBuffer[MAX_PACKET_SIZE];
 				usbd_ep_read_packet(usbd_dev, ep, dummyBuffer, MAX_PACKET_SIZE);
 			}
-		}
-		if (mTxFifo.count()) {
-			Array<uint8_t, MAX_PACKET_SIZE> buf;
-			size_t i = 0;
-			while (i < buf.size() and i < mTxFifo.count()) {
-				buf[i] = mTxFifo[i];
-				++i;
+		} else {
+			if (mTxFifo.count()) {
+				mSending = true;
+				Array<uint8_t, MAX_PACKET_SIZE> buf;
+				size_t i = 0;
+				while (i < buf.size() and i < mTxFifo.count()) {
+					buf[i] = mTxFifo[i];
+					++i;
+				}
+				uint16_t len = usbd_ep_write_packet(usbd_dev, ep, buf.data(), i, MAX_PACKET_SIZE);
+				mTxFifo.pop(len);
+			} else {
+				mSending = false;
 			}
-			uint16_t len = usbd_ep_write_packet(usbd_dev, ep, buf.data(), i, MAX_PACKET_SIZE);
-			mTxFifo.pop(len);
 		}
 	}
 
@@ -105,8 +110,8 @@ public:
 			msgCast += stored;
 			len -= stored;
 			mCurPacketLen -= stored;
-			if (mTxFifo.countFree() == 0 or mCurPacketLen == 0) {
-				flawless::LockGuard lock;
+			flawless::LockGuard lock;
+			if ((not mSending) and ((mTxFifo.countFree() == 0) or (mCurPacketLen == 0))) {
 				callback(manager.getUSBDevice(), COM_USB_IN_ENDPOINT_OUT_NO);
 			}
 		}
@@ -114,6 +119,7 @@ public:
 
 private:
 	uint16_t mCurPacketLen {0};
+	bool mSending {false};
 };
 
 USBComModule USBtestModule(3);

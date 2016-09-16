@@ -14,8 +14,8 @@ class MessageBufferManager final
 {
 public:
 	Message<T> getFreeMessage() {
-		MessageBufferMemoryBase<T>* buffer = flawless::util::LinkedList<MessageBufferMemoryBase<T>>::get().mFirst;
 		flawless::LockGuard lock;
+		MessageBufferMemoryBase<T>* buffer = flawless::util::LinkedList<MessageBufferMemoryBase<T>>::get().mFirst;
 		while (buffer) {
 			MessageContainer<T> * msg = buffer->getFreeMessage();
 			if (msg) {

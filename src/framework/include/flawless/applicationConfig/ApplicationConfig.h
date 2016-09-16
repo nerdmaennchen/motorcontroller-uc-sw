@@ -36,6 +36,7 @@ class ApplicationConfig final : public ApplicationConfigBase
 public:
 
 	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name) {}
+	ApplicationConfig(const char* _name, Callback<void>* cb) : ApplicationConfigBase(_name, cb) {}
 	ApplicationConfig(const char* _name, T const& val) : ApplicationConfigBase(_name), value(val) {}
 	ApplicationConfig(const char* _name, Callback<void>* cb, T const& val) : ApplicationConfigBase(_name, cb), value(val) {}
 

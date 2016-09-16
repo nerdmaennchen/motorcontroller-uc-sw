@@ -161,7 +161,7 @@ static void usbEPCallbackWrapper(usbd_device *usbd_dev, uint8_t ep) {
 	if (ep & 0x80) {
 		ep = ep & ~0x80;
 		if (g_usb_ep_in_callbacks[ep]) {
-			g_usb_ep_in_callbacks[ep]->callback(usbd_dev, ep);
+			g_usb_ep_in_callbacks[ep]->callback(usbd_dev, ep|0x80);
 		}
 	} else {
 		if (g_usb_ep_out_callbacks[ep]) {

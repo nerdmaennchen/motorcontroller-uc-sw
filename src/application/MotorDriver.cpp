@@ -25,8 +25,6 @@
 #include <math.h>
 #include <algorithm>
 
-
-
 #define PWM_PORT  GPIOB
 #define PWM_PIN_0 GPIO6
 #define PWM_PIN_1 GPIO7
@@ -39,8 +37,7 @@
 #define PWM_PINS (PWM_PIN_0 | PWM_PIN_1 | PWM_PIN_2 | PWM_PIN_3)
 #define PWM_ENABLE_PINS (PWN_ENABLE_PIN1 | PWN_ENABLE_PIN2)
 
-#define PWM_FREQUENCY_HZ 20000
-
+#define PWM_TIMER TIM4
 
 #define CCR_DMA DMA1
 #define CCR_DMA_STREAM 2
@@ -48,24 +45,20 @@
 
 #define DMA_TRIGGER_TIMER TIM3
 
-#define PWM_TIMER TIM4
-
-constexpr uint32_t PWM_AMPLITUDE     = 1024;
-constexpr uint32_t MIN_PWM_AMPLITUDE = PWM_AMPLITUDE;
-constexpr uint32_t MIN_PWM_VAL       = 40;
-
-constexpr uint32_t StepsCount = 512;
-constexpr uint32_t TicksPerStep = 4;
-constexpr uint32_t TotalTickCnt = StepsCount * TicksPerStep;
-
 #define M_PI 3.14159265359f
 
-struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMeasure, 3>, flawless::Listener<MotorCurrent, 3>
+using namespace motordriver;
+
+static int myModulo(int i, int m) {
+	return (i%m + m) % m;
+}
+
+struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMeasure, 3>, flawless::Listener<MotorCurrent, 3>, public flawless::TimerCallback
 {
-	using CommutatinPattern = Array<Array<uint16_t, 4>, StepsCount>;
+	using CommutatinPattern = Array<Array<uint16_t, TicksPerStep>, StepsCount * 2>;
 	using RemapType = Array<uint8_t, 4>;
 
-	MotorDriver(unsigned int level) : flawless::Module(level) {}
+	MotorDriver(unsigned int level) : flawless::Module(level), flawless::TimerCallback(500000, true) {}
 	virtual ~MotorDriver() {}
 
 	void initPins() {
@@ -87,14 +80,14 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 		TIM_CR2(PWM_TIMER) = 0;
 		TIM_SMCR(PWM_TIMER) = 0;
 
-		TIM_CR1(PWM_TIMER)   = TIM_CR1_ARPE | TIM_CR1_CMS_CENTER_3;
+		TIM_CR1(PWM_TIMER)   = TIM_CR1_ARPE;// | TIM_CR1_CMS_CENTER_3;
 
 		TIM_CCMR1(PWM_TIMER) = TIM_CCMR1_OC1M_PWM1 | TIM_CCMR1_OC2M_PWM1 | TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE;
 		TIM_CCMR2(PWM_TIMER) = TIM_CCMR2_OC3M_PWM1 | TIM_CCMR2_OC4M_PWM1 | TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
 		TIM_CCER(PWM_TIMER) |= TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E;
 
-		TIM_PSC(PWM_TIMER)   = 0; //(uint16_t) (CLOCK_APB1_TIMER_CLK / (PWM_FREQUENCY_HZ * MIN_PWM_VAL * 2)) - 1;
-		TIM_ARR(PWM_TIMER)   = MIN_PWM_AMPLITUDE;
+		TIM_PSC(PWM_TIMER)   = 0;
+		TIM_ARR(PWM_TIMER)   = PWM_AMPLITUDE + PWM_OFF_TIME;
 		TIM_CNT(PWM_TIMER)   = 0;
 
 		TIM_CCR1(PWM_TIMER) = 0;
@@ -108,13 +101,6 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 		TIM_EGR(PWM_TIMER)  = TIM_EGR_UG;
 		TIM_SR(PWM_TIMER)   = 0;
 	}
-
-	class DummyTimer : public flawless::TimerCallback {
-	public:
-		DummyTimer(flawless::timerInterval_t interval, bool repeating) : flawless::TimerCallback(interval, repeating) {}
-		void callback() override {
-		}
-	} mOnTimer{500000, true};
 
 	void initDMA()
 	{
@@ -141,26 +127,20 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 							DMA_CR_MSIZE_HALFWORD | DMA_CR_PSIZE_HALFWORD |
 							DMA_CR_CIRC | DMA_CR_DIR | DMA_CR_MINC;
 		DMA_SPAR(CCR_DMA, CCR_DMA_STREAM)  = (uint32_t) &TIM_DMAR(PWM_TIMER);
-		DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) (&(g_cwConfigs.get())[0]);
-		DMA_SM1AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) (&(g_ccwConfigs.get())[0]);
-
-		runTickIntervall(0, StepsCount, true, true);
+		DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) g_cwConfigs->data();
+		mLastSetSNDTR = DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) = StepsCount * TicksPerStep;
+		runTickIntervall(0, 0, 0, true);
 	}
 
 	flawless::ApplicationConfig<MotorCurrent> mMotorCurrentMean{"motorCurrentMean"};
-	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", 0.1f};
-	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", 0.9f};
+	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", 0.2f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", 0.1f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"currentError"};
 	void callback(flawless::Message<MotorCurrent> const& motorCurrent) override {
-		mMotorCurrentMean = *motorCurrent * float(PWM_AMPLITUDE) / float(TIM_ARR(PWM_TIMER));
-		float error = (1.f + (mMotorCurrentMean - mMaxCurrent) * mCurrentP);
-		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * error;
-		targetAmplitude = std::max(MIN_PWM_AMPLITUDE, std::min(uint32_t(0xffff), targetAmplitude));
-
-//		uint16_t psc = (uint16_t) (CLOCK_APB1_TIMER_CLK / (PWM_FREQUENCY_HZ * targetAmplitude)) ;
-//		if (psc != 0) {
-//			psc -= 1;
-//		}
-		TIM_PSC(PWM_TIMER)   = 0;//psc;
+		mMotorCurrentMean = *motorCurrent;
+		mCurrentError = mMotorCurrentMean - mMaxCurrent;
+		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * (1.f + (mMotorCurrentMean-mMaxCurrent) * mCurrentP);
+		targetAmplitude = std::max(PWM_AMPLITUDE+PWM_OFF_TIME, std::min(uint32_t(0xffff), targetAmplitude));
 		TIM_ARR(PWM_TIMER)   = targetAmplitude;
 	}
 
@@ -171,42 +151,85 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 		}
 	}
 
+	void callback() {
+
+	}
+
 	flawless::ApplicationConfig<MotorCurrentMeasure> mMotorCurrent{"motorCurrent"};
 
 	void setupPWMConfigs(uint8_t stepsPerPhase) {
 		mStepsPerPhase = stepsPerPhase;
 		double phaseOffset = 2.f * M_PI / float(stepsPerPhase);
 		const float scaleFactor = M_PI * 2.f / float(StepsCount);
-		for (std::size_t sIdx = 0; sIdx < StepsCount; ++sIdx) {
+		for (std::size_t sIdx = 0; sIdx < g_ccwConfigs->size(); ++sIdx) {
 			float phase0 = (float)sIdx * scaleFactor;
 			for (size_t i = 0; i < TicksPerStep; ++i) {
 				float phase = phase0 + phaseOffset * i;
-				const float s = std::cos(phase) * .5f;
-				const float intermediate = s * (PWM_AMPLITUDE-MIN_PWM_VAL*2) + PWM_AMPLITUDE / 2.f;
-				const uint16_t sVal = std::max(MIN_PWM_VAL, std::min(PWM_AMPLITUDE, uint32_t(roundf(intermediate))));
+				float s = std::sin(phase);
+				s = s * .5f + .5f;
+				const float intermediate = s * PWM_AMPLITUDE + PWM_OFF_TIME / 2;
+				const uint16_t sVal = uint32_t(roundf(intermediate));
 				g_cwConfigs.get()[sIdx][mRemaps[i]] = sVal;
-				g_ccwConfigs.get()[StepsCount - 1 - sIdx][mRemaps[i]] = sVal;
+				g_ccwConfigs.get()[g_ccwConfigs.get().size() - 1 - sIdx][mRemaps[i]] = sVal;
 			}
 		}
 	}
 
-	void runTickIntervall(uint32_t stepStart, uint32_t stepEnd, bool cw, bool cycle=true) {
+	void runTickIntervall(int32_t stepStart, uint32_t stepCnt, int mHZ, bool cycle=true) {
 		while (0 != (DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_EN)) {
 			DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) &= ~DMA_CR_EN;
 		}
-		uint32_t tickCnt = (stepEnd - stepStart) * TicksPerStep;
-		if (cw) {
-			DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) (&g_cwConfigs.get()[stepStart]);
+
+		TIM_CR1(DMA_TRIGGER_TIMER) &= ~TIM_CR1_CEN;
+		stepStart = myModulo(stepStart, StepsCount);
+		if (mHZ != 0) {
+			const long unsigned int delayTicks = (CLOCK_APB1_TIMER_CLK * mStepsPerPhase * 1000) / (abs(mHZ) * StepsCount);
+			uint16_t psc = (delayTicks >> 16) & 0xffff;
+			uint16_t arr = delayTicks / (psc + 1);
+			TIM_PSC(DMA_TRIGGER_TIMER) = psc;
+			TIM_ARR(DMA_TRIGGER_TIMER) = arr;
+			TIM_CNT(DMA_TRIGGER_TIMER) = 0;
+
+			DMA_LIFCR(CCR_DMA) = 0x3d << 16;
+
+			if (mHZ > 0) {
+				DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) &(g_cwConfigs.get()[stepStart]);
+			} else {
+				DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) &(g_ccwConfigs.get()[StepsCount - stepStart]);
+			}
+
+			mLastSetSNDTR = DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) = stepCnt * TicksPerStep;
+			if (cycle) {
+				DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_CIRC;
+			} else {
+				DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) &= ~DMA_CR_CIRC;
+			}
+			DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_EN;
+
+			TIM_EGR(DMA_TRIGGER_TIMER) = TIM_EGR_UG;
+			TIM_CR1(DMA_TRIGGER_TIMER) |= TIM_CR1_CEN;
 		} else {
-			DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) (&g_ccwConfigs.get()[stepStart]);
+			Array<uint16_t, 4> const* arrVals = &(g_cwConfigs.get()[stepStart]);
+			DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) &(g_cwConfigs.get()[stepStart]);
+			mLastSetSNDTR = DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) = 0;
+
+			TIM_CCR1(PWM_TIMER) = (*arrVals)[0];
+			TIM_CCR2(PWM_TIMER) = (*arrVals)[1];
+			TIM_CCR3(PWM_TIMER) = (*arrVals)[2];
+			TIM_CCR4(PWM_TIMER) = (*arrVals)[3];
 		}
-		DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) = tickCnt;
-		if (cycle) {
-			DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_CIRC;
+	}
+
+	uint32_t getCurStep() {
+		Array<uint16_t, TicksPerStep> const* curPtr = (Array<uint16_t, TicksPerStep> const*)DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM);
+		uint32_t stepsDone = (mLastSetSNDTR - DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM)) / TicksPerStep;
+		if (g_ccwConfigs.get().begin() <= curPtr and curPtr < g_ccwConfigs.get().end()) {
+			uint32_t ptrOffset = curPtr - g_ccwConfigs.get().begin();
+			return (2 * StepsCount - ptrOffset + stepsDone) % StepsCount;
 		} else {
-			DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) &= ~DMA_CR_CIRC;
+			uint32_t ptrOffset = curPtr - g_cwConfigs.get().begin();
+			return (2 * StepsCount + ptrOffset + stepsDone) % StepsCount;
 		}
-		DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_EN;
 	}
 
 	void advanceToTick(uint32_t tickCnt) {
@@ -215,7 +238,6 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 		TIM_CR1(PWM_TIMER) |= TIM_CR1_UDIS;
 		while ((DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) % (TotalTickCnt)) != tickCnt) {
 			TIM_EGR(DMA_TRIGGER_TIMER) = TIM_EGR_UG;
-//			for (volatile int i(0); i < 10; ++i);
 		}
 		TIM_CR1(PWM_TIMER) &= ~TIM_CR1_UDIS;
 	}
@@ -239,7 +261,7 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 			TIM_EGR(PWM_TIMER) = TIM_EGR_UG;
 		} else {
 			gpio_clear(PWM_PORT, PWM_ENABLE_PINS);
-			setSpeed(0);
+			TIM_CR1(DMA_TRIGGER_TIMER) &= ~TIM_CR1_CEN;
 			TIM_SMCR(PWM_TIMER) = 0;
 			TIM_CR2(PWM_TIMER) = 0;
 			TIM_CR1(PWM_TIMER)  &= ~TIM_CR1_CEN;
@@ -325,6 +347,7 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 		bufferConfigCallback.mDriver = this;
 		enableCallback.mDriver       = this;
 		phaseCallback.mDriver        = this;
+		runIntervalCallback.mDriver  = this;
 		bufferConfigCallback.callback();
 		setEnabled(false);
 	}
@@ -335,57 +358,61 @@ struct MotorDriver : public flawless::Module, flawless::Listener<MotorCurrentMea
 	flawless::ApplicationConfig<CommutatinPattern> g_ccwConfigs {"ccwConfigs"};
 
 	int mCurSpeed {0};
+	uint32_t mLastSetSNDTR {0};
 	uint8_t mStepsPerPhase {0};
 
-	class : flawless::Callback<void> {
-	public:
+	struct : flawless::Callback<void> {
 		MotorDriver* mDriver;
 		void callback() override {
 			mDriver->setSpeed(speedConfig);
 		}
-	private:
 		flawless::ApplicationConfig<int> speedConfig{"speed", this, 0};
 	} speedCallback;
 
-	class : flawless::Callback<void> {
-	public:
+	struct : flawless::Callback<void> {
+		MotorDriver* mDriver;
+		struct __attribute__((packed)) RunTickParams {
+			uint32_t start;
+			uint32_t count;
+			uint32_t speed;
+			bool cyclic;
+		};
+		void callback() override {
+			mDriver->runTickIntervall(tickConfig->start, tickConfig->count, tickConfig->speed, tickConfig->cyclic);
+		}
+		flawless::ApplicationConfig<RunTickParams> tickConfig{"runTicks", this};
+	} runIntervalCallback;
+
+	struct : flawless::Callback<void> {
 		MotorDriver* mDriver;
 		void callback() override {
 			mDriver->setBufferConfig(bufferConfig->stepsPerPhase, bufferConfig->remaps);
 		}
-	private:
 		struct BufferConfig {
 			uint8_t stepsPerPhase;
 			RemapType remaps;
 		};
-		flawless::ApplicationConfig<BufferConfig> bufferConfig{"remaps", this, {4, 0, 1, 2, 3}};
+		flawless::ApplicationConfig<BufferConfig> bufferConfig{"remaps", this, {3, 0, 1, 2, 3}};
 	} bufferConfigCallback;
 
-	class : flawless::Callback<void> {
-	public:
+	struct : flawless::Callback<void> {
 		MotorDriver* mDriver;
 		void callback() override {
 			mDriver->setEnabled(enableConfig);
 		}
-	private:
 		flawless::ApplicationConfig<bool> enableConfig{"enable", this, false};
 	} enableCallback;
 	
-	class : flawless::Callback<void> {
-	public:
+	struct : flawless::Callback<void> {
 		MotorDriver* mDriver;
 		void callback() override {
-			mDriver->advanceToTick(phase * TicksPerStep);
+			mDriver->runTickIntervall(phase, 1, 0, false);
 		}
-	private:
 		flawless::ApplicationConfig<uint16_t> phase{"phase", this, false};
 	} phaseCallback;
 };
 
-namespace
-{
-flawless::MessageBufferMemory<int, 5> intMsgBuf;
-flawless::MessageBufferMemory<int, 1> intMsgBuf2;
+static MotorDriver motorDriver(9);
 
 constexpr uint32_t HALL_PORT = GPIOA;
 constexpr uint32_t HALL_U    = GPIO10;
@@ -394,7 +421,9 @@ constexpr uint32_t HALL_W    = GPIO8;
 constexpr uint32_t HALL_PINS = (HALL_U | HALL_V | HALL_W);
 constexpr uint32_t HALL_TIMER = TIM1;
 
-struct HallModule : public flawless::Module
+
+
+struct HallModule : public flawless::Module, public flawless::Callback<void>
 {
 	HallModule(unsigned int level) : flawless::Module(level) {}
 
@@ -419,21 +448,129 @@ struct HallModule : public flawless::Module
 
 		gpio_mode_setup(HALL_PORT, GPIO_MODE_AF, GPIO_PUPD_PULLUP, HALL_PINS);
 		gpio_set_af(HALL_PORT, GPIO_AF1, HALL_PINS);
+
+		// setup the lookup tables
+		uint8_t step0 = 2; // at phase 0 we read a hall feedback of 2
+		for (int i=0; i < 6; ++i) {
+			mCWHallIndexes.get()[step0]  = myModulo(-50 + 100 * i, StepsCount);
+			step0 = getNextStep(step0, true);
+		}
+		for (int i=0; i < 6; ++i) {
+			mCCWHallIndexes.get()[step0] = myModulo(50 + 100 * i, StepsCount);
+			step0 = getNextStep(step0, false);
+		}
+	}
+
+	uint8_t getNextStep(uint8_t curStep, bool cw) {
+		uint8_t inv = ~curStep;
+		if (cw) {
+			inv = ((inv >> 1) & 3) | ((inv << 2) & 4);
+			return inv;
+		} else {
+			inv = ((inv << 1) & 6) | ((inv >> 2) & 1);
+			return inv;
+		}
+	}
+
+	void stepUpdate() {
+		uint64_t speed = 2000000 * 3000 / mLastHallDelay;
+		speed = std::min(speed, uint64_t(std::abs(mRunWithTargetSpeed)));
+		if (mRunWithTargetSpeed > 0) {
+			uint32_t start = mCWHallIndexes.get()[mHallVWUStates];
+			uint32_t target = start + mAdvance;
+			motorDriver.runTickIntervall(target, StepsCount / 12, speed, false);
+		} else if (mRunWithTargetSpeed < 0) {
+			int32_t start = mCWHallIndexes.get()[mHallVWUStates];
+			int32_t target = start - mAdvance;
+			motorDriver.runTickIntervall(target, StepsCount / 12, -speed, false);
+		}
 	}
 
 	void notifyHallTick(uint64_t delay) {
-		mHallStates = (gpio_port_read(HALL_PORT) >> 8) & 0x7;
-		mHallDelay = delay;
+		mHallVWUStates = (gpio_port_read(HALL_PORT) >> 8) & 0x7;
+		mHallDelays[mMeasureHallIndex] = mLastHallDelay = delay;
+		++mMeasureHallIndex;
+		if (mMeasureHallIndex >= mHallDelays.size()) {
+			mMeasureHallIndex = 0;
+		}
+		mHallDelay = 0;
+		for (auto const& d : mHallDelays) {
+			mHallDelay += d;
+		}
+
+		if (mRunWithTargetSpeed != 0) {
+			stepUpdate();
+		}
+		if (mLastHallStates != mHallVWUStates and mLastLastHallStates != mHallVWUStates) {
+			 if (not mRunWithTargetSpeed and mSetMeasureHalls and
+				mLastHallStates and mLastLastHallStates) {
+				uint32_t curStep = motorDriver.getCurStep();
+				if (mSetMeasureHalls > 0) {
+					mCWHallIndexes.get()[mHallVWUStates] += curStep;
+				} else {
+					mCCWHallIndexes.get()[mHallVWUStates] += curStep;
+				}
+				++mTickCounts[mHallVWUStates];
+			}
+		}
+		mLastLastHallStates = mLastHallStates;
+		mLastHallStates = mHallVWUStates;
 	}
 
-	flawless::ApplicationConfig<uint8_t> mHallStates{"hallstates"};
+	void callback() override {
+		if (mRunWithTargetSpeed != 0) {
+			mHallVWUStates = (gpio_port_read(HALL_PORT) >> 8) & 0x7;
+			stepUpdate();
+		} else {
+			if (mSetMeasureHalls) {
+				for (auto & val : mTickCounts) {
+					val = 0;
+				}
+				if (mSetMeasureHalls > 0) {
+					for (auto & val : mCWHallIndexes.get()) {
+						val = 0;
+					}
+				} else {
+					for (auto & val : mCCWHallIndexes.get()) {
+						val = 0;
+					}
+				}
+				motorDriver.setEnabled(true);
+				motorDriver.runTickIntervall(0, StepsCount, mSetMeasureHalls, true);
+			} else {
+				motorDriver.setEnabled(false);
+				if (mLastSetMeasurementHalls > 0) {
+					for (size_t i(0); i < mTickCounts.size(); ++i) {
+						mCWHallIndexes.get()[i] = mCWHallIndexes.get()[i] / mTickCounts[i];
+					}
+				} else if (mLastSetMeasurementHalls < 0) {
+					for (size_t i(0); i < mTickCounts.size(); ++i) {
+						mCCWHallIndexes.get()[i] = mCCWHallIndexes.get()[i] / mTickCounts[i];
+					}
+				}
+			}
+			mLastSetMeasurementHalls = mSetMeasureHalls;
+		}
+	}
+
+	size_t mMeasureHallIndex {0};
+	Array<uint64_t, 6> mHallDelays;
+	uint64_t mLastHallDelay {0};
+	int mLastSetMeasurementHalls {0};
+	uint8_t mLastHallStates {0};
+	uint8_t mLastLastHallStates {0};
+	Array<uint16_t, 8> mTickCounts;
+	flawless::ApplicationConfig<Array<uint16_t, 8>> mCWHallIndexes{"CWHallIndexes"};
+	flawless::ApplicationConfig<Array<uint16_t, 8>> mCCWHallIndexes{"CCWHallIndexes"};
+	flawless::ApplicationConfig<uint8_t> mHallVWUStates{"hallstates"};
 	flawless::ApplicationConfig<uint64_t> mHallDelay{"HallDelay"};
+
+	flawless::ApplicationConfig<int> mSetMeasureHalls{"measureHallIndexes", this};
+	flawless::ApplicationConfig<int> mRunWithTargetSpeed{"targetSpeed", this};
+	flawless::ApplicationConfig<int> mAdvance{"advance", {100}};
 };
 
-namespace {
 static HallModule  hallModule(9);
-static MotorDriver motorDriver(9);
-}
 
 extern "C" {
 static volatile uint64_t delayBetweenTicks;
@@ -452,13 +589,10 @@ void tim1_cc_isr()
 	flawless::LockGuard lock;
 	delayBetweenTicks += TIM_CCR1(HALL_TIMER);
 
-	// todo call handler
 	hallModule.notifyHallTick(delayBetweenTicks);
 
 	delayBetweenTicks = 0;
 	TIM_SR(HALL_TIMER) = 0;
-}
-
 }
 
 }
