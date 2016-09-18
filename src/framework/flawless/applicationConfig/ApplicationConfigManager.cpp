@@ -11,7 +11,7 @@ class ApplicationConfigManager: public flawless::PacketHandler
 public:
 	ApplicationConfigManager() : flawless::PacketHandler(1) {}
 
-	void handlePacket(flawless::PhyInterface* iface, uint8_t const* packet, size_t len) override {
+	void handlePacket(flawless::PhyInterface* iface, uint8_t const* packet, uint32_t len) override {
 		if (0 == len) {
 			// return the description
 			uint16_t totalPackeLen = 0;
@@ -39,14 +39,8 @@ public:
 			while (handle) {
 				if (target == idx) {
 					uint16_t paramLen = handle->getSize();
-					if (0 == paramLen) { // either call the callback or read the content
-						if (handle->mOnValueChangedCB) {
-							handle->mOnValueChangedCB->callback();
-						}
-					} else {
-						iface->startPacket(mEPNum, paramLen);
-						iface->sendPacket(handle->getDataPtr(), paramLen);
-					}
+					iface->startPacket(mEPNum, paramLen);
+					iface->sendPacket(handle->getValue(), paramLen);
 					break;
 				}
 				++idx;
@@ -58,11 +52,8 @@ public:
 			uint8_t idx = 0;
 			uint8_t target = packet[0];
 			while (handle) {
-				if (target == idx and len == handle->getSize() + 1) {
+				if (target == idx and len == handle->getSize() + 1U) {
 					handle->setValue(&(packet[1]));
-					if (handle->mOnValueChangedCB) {
-						handle->mOnValueChangedCB->callback();
-					}
 					break;
 				}
 				++idx;

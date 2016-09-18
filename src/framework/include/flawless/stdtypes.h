@@ -3,7 +3,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <stddef.h>
+#include <inttypes.h>
 
 #include "misc/Assert.h"
 

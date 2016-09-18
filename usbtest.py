@@ -118,7 +118,10 @@ if __name__ == "__main__":
 		exit(0)
 	
 	configs = fetchConfig(dev)
-	
+	if len(sys.argv) == 1:
+		print(configs)
+		exit(0)
+		
 #format: [progname] set target [formatstr (params)*]
 	if len(sys.argv) >= 3 and sys.argv[1] == "set":
 		target = sys.argv[2]

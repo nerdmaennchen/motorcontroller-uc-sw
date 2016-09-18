@@ -1,6 +1,6 @@
 
 #include "MotorCurrent.h"
-#include "MotorDriver.h"
+#include "PWMDriver.h"
 
 #include <flawless/module/Module.h>
 
@@ -51,7 +51,7 @@ flawless::MessageBufferMemory<MotorCurrent, 5> currentMeanMeasurements;
 #define SHUNT_CONDUCTIVITY 20
 #define MIN_ADC_DELAY_US 100000
 
-class MotorCurrentMeasurer final : public flawless::Module, public flawless::Callback<void>
+class MotorCurrentMeasurer final : public flawless::Module, public flawless::Callback<uint16_t&, bool>
 {
 	using RawMeasurementType_t = MotorCurrentMeasure;
 public:
@@ -80,8 +80,8 @@ public:
 			} else {
 				maxMsg = 0.f;
 			}
-			maxMsg.invokeDirectly<3>();
-			detailledMsg.post<3>();
+			maxMsg.invokeDirectly<0>();
+			detailledMsg.post<0>();
 		}
 	}
 
@@ -172,12 +172,12 @@ public:
 		TIM_SR(AUX_TIMER) = 0;
 	}
 
-	void callback() override {
+	void callback(uint16_t&, bool) override {
 		TIM_BDTR(AUX_TIMER) |= TIM_BDTR_MOE;
 		TIM_CCR2(AUX_TIMER)  = enableConfig;
 	}
 
-	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", this, (motordriver::PWM_OFF_TIME+motordriver::PWM_AMPLITUDE)/2};
+	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", this, (pwmdriver::PwmOffTimer+pwmdriver::PwmAmplitude)/2};
 
 
 	void init(unsigned int) override {

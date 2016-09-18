@@ -41,9 +41,11 @@ constexpr uint32_t NUM_LEDS = 15;
 constexpr uint8_t LED_ONE_SUBSTITUTE  = 0xe;
 constexpr uint8_t LED_ZERO_SUBSTITUTE = 0x8;
 
+using RGBConfigs = Array<rgb_t, NUM_LEDS>;
 
-struct LEDModule : public flawless::Module, flawless::Callback<void>
+struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool>
 {
+
 	LEDModule(unsigned int level) : flawless::Module(level) {}
 
 	void init(unsigned int) override {
@@ -51,8 +53,7 @@ struct LEDModule : public flawless::Module, flawless::Callback<void>
 		setupSPI();
 		setupDMA();
 
-		callback();
-		mRGBBuffer.setCallback(this);
+		callback(mRGBBuffer.get(), true);
 	}
 
 	void setupDMA(void)
@@ -106,7 +107,7 @@ struct LEDModule : public flawless::Module, flawless::Callback<void>
 		SPI_CR1(LED_SPI) |= SPI_CR1_SPE;
 	}
 
-	void callback() override {
+	void callback(RGBConfigs&, bool) override {
 		uint8_t *outBufPtr = mOutBufferAfterPreamble;
 
 		for (rgb_t const& rgb : mRGBBuffer.get()) {
@@ -128,7 +129,7 @@ struct LEDModule : public flawless::Module, flawless::Callback<void>
 		}
 	}
 
-	flawless::ApplicationConfig<Array<rgb_t, NUM_LEDS>> mRGBBuffer{"ledBuffer"};
+	flawless::ApplicationConfig<RGBConfigs> mRGBBuffer{"ledBuffer", this};
 	Array<uint8_t, PREAMBLE_BYTES + bytesToSubstituteCnt(NUM_LEDS * 3)> mOutputBuffer;
 	uint8_t *mOutBufferAfterPreamble {0};
 } ledModule(9);

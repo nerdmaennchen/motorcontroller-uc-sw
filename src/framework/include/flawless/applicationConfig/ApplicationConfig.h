@@ -11,20 +11,14 @@ namespace flawless
 class ApplicationConfigBase : public flawless::util::LinkedListNode<ApplicationConfigBase> {
 public:
 	ApplicationConfigBase(const char* _name) : name(_name) {}
-	ApplicationConfigBase(const char* _name, Callback<void>* cb) : mOnValueChangedCB(cb), name(_name) {}
 	virtual ~ApplicationConfigBase() {}
 
 	char const* getName() const { return (name); }
 
 	virtual void setValue(void const* vals) = 0;
-	virtual void* getDataPtr() = 0;
+	virtual void const* getValue() = 0;
 	virtual uint16_t getSize() const = 0;
 
-	void setCallback(Callback<void>* cb) {
-		mOnValueChangedCB = cb;
-	}
-
-	Callback<void>* mOnValueChangedCB {nullptr};
 private:
 	const char* name;
 };
@@ -33,16 +27,15 @@ template<typename T>
 class ApplicationConfig final : public ApplicationConfigBase
 {
 	T value;
+	using callbackType = Callback<T&, bool>;
+	callbackType* mCB {nullptr};
 public:
 
 	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name) {}
-	ApplicationConfig(const char* _name, Callback<void>* cb) : ApplicationConfigBase(_name, cb) {}
+	ApplicationConfig(const char* _name, callbackType* cb) : ApplicationConfigBase(_name), mCB(cb) {}
 	ApplicationConfig(const char* _name, T const& val) : ApplicationConfigBase(_name), value(val) {}
-	ApplicationConfig(const char* _name, Callback<void>* cb, T const& val) : ApplicationConfigBase(_name, cb), value(val) {}
+	ApplicationConfig(const char* _name, callbackType* cb, T const& val) : ApplicationConfigBase(_name), value(val), mCB(cb) {}
 
-	void* getDataPtr() override {
-		return &value;
-	};
 	uint16_t getSize() const override {
 		return sizeof(T);
 	};
@@ -52,7 +45,6 @@ public:
 		return *this;
 	}
 
-
 	T& get() {
 		return value;
 	}
@@ -60,6 +52,7 @@ public:
 	operator T&() {
 		return value;
 	}
+
 	operator T const&() const {
 		return value;
 	}
@@ -70,6 +63,16 @@ public:
 
 	void setValue(void const* vals) {
 		memcpy(&value, vals, getSize());
+		if (mCB) {
+			mCB->callback(value, true);
+		}
+	}
+
+	void const* getValue() override {
+		if (mCB) {
+			mCB->callback(value, false);
+		}
+		return &value;
 	}
 };
 
@@ -77,19 +80,21 @@ public:
 template<>
 class ApplicationConfig<void> final : public ApplicationConfigBase
 {
+	using callbackType = Callback<void>;
+	callbackType* mCB {nullptr};
 public:
 
 	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name) {}
-	ApplicationConfig(const char* _name, Callback<void>* cb) : ApplicationConfigBase(_name, cb) {}
+	ApplicationConfig(const char* _name, callbackType* cb) : ApplicationConfigBase(_name), mCB(cb) {}
 
-	void* getDataPtr() override {
-		return nullptr;
-	};
-	uint16_t getSize() const override {
-		return 0;
-	};
+	void const* getValue() override { return nullptr; };
+	uint16_t getSize() const override { return 0; };
 
-	void setValue(void const*) override {}
+	void setValue(void const*) override {
+		if (mCB) {
+			mCB->callback();
+		}
+	}
 };
 
 } /* namespace flawless */

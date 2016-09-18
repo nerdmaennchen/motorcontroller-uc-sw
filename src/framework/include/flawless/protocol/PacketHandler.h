@@ -11,7 +11,7 @@ class PacketHandler : public flawless::util::LinkedListNode<PacketHandler> {
 public:
 	PacketHandler(uint8_t epNum) : mEPNum(epNum) {}
 
-	virtual void handlePacket(PhyInterface* iface, uint8_t const* data, size_t len) = 0;
+	virtual void handlePacket(PhyInterface* iface, uint8_t const* data, uint32_t len) = 0;
 
 	const uint8_t mEPNum;
 };
