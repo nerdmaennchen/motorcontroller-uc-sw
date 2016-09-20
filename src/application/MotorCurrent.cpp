@@ -1,6 +1,7 @@
 
 #include "MotorCurrent.h"
 #include "PWMDriver.h"
+#include "interfaces/ISRTime.h"
 
 #include <flawless/module/Module.h>
 
@@ -48,7 +49,7 @@ flawless::MessageBufferMemory<int, 5> intMsgBuf;
 flawless::MessageBufferMemory<MotorCurrentMeasure, 5> currentMeasurements;
 flawless::MessageBufferMemory<MotorCurrent, 5> currentMeanMeasurements;
 
-#define SHUNT_CONDUCTIVITY 20
+constexpr float SHUNT_CONDUCTIVITY = 20;
 #define MIN_ADC_DELAY_US 100000
 
 class MotorCurrentMeasurer final : public flawless::Module, public flawless::Callback<uint16_t&, bool>
@@ -59,29 +60,48 @@ public:
 
 	virtual ~MotorCurrentMeasurer() {}
 
-	void onDMADone() {
-		auto detailledMsg = flawless::MessageBufferManager<MotorCurrentMeasure>::get().getFreeMessage();
-		auto maxMsg = flawless::MessageBufferManager<MotorCurrent>::get().getFreeMessage();
-		if (detailledMsg) {
-			float max = 0;
-			Array<uint16_t, SMOOTHING_CNT> const* buffer = &(mRawMeasureBuffer1);
-			uint32_t cnt = 0;
-			for (size_t i(0); i < buffer->size(); ++i) {
-				float val = (float((*buffer)[i]) * 3.3f * SHUNT_CONDUCTIVITY / float(ADC_RESOLUTION));
-				if ((*buffer)[i] > 0) {
-					max += val;
-					++cnt;
-				}
+//	void onDMADone() {
+//		auto detailledMsg = flawless::MessageBufferManager<MotorCurrentMeasure>::get().getFreeMessage();
+//		auto maxMsg = flawless::MessageBufferManager<MotorCurrent>::get().getFreeMessage();
+//		if (detailledMsg) {
+//			float max = 0;
+//			Array<uint16_t, SMOOTHING_CNT> const* buffer = &(mRawMeasureBuffer2);
+//			if (DMA_SCCR(SENSE_DMA, SENSE_DMA_STREAM) & DMA_CR_CT) {
+//				buffer = &(mRawMeasureBuffer1);
+//			}
+//			uint32_t cnt = 0;
+//			for (size_t i(0); i < buffer->size(); ++i) {
+//				float val = (float((*buffer)[i]) * 3.3f * SHUNT_CONDUCTIVITY / float(ADC_RESOLUTION));
+//				if ((*buffer)[i] > 0) {
+//					max += val;
+//					++cnt;
+//				}
+//
+//				(*detailledMsg).vals[i] = val;
+//			}
+//			if (cnt > 0) {
+//				maxMsg = max / cnt;
+//			} else {
+//				maxMsg = 0.f;
+//			}
+//			maxMsg.invokeDirectly<0>();
+//			detailledMsg.post<0>();
+//		}
+//	}
 
-				(*detailledMsg).vals[i] = val;
+	void onDMADone() {
+		auto meanMsg = flawless::MessageBufferManager<MotorCurrent>::get().getFreeMessage();
+		if (meanMsg) {
+			uint32_t mean = 0;
+			Array<uint16_t, SMOOTHING_CNT> const* buffer = &(mRawMeasureBuffer2);
+			if (DMA_SCCR(SENSE_DMA, SENSE_DMA_STREAM) & DMA_CR_CT) {
+				buffer = &(mRawMeasureBuffer1);
 			}
-			if (cnt > 0) {
-				maxMsg = max / cnt;
-			} else {
-				maxMsg = 0.f;
+			for (auto const& val : *buffer) {
+				mean += val;
 			}
-			maxMsg.invokeDirectly<0>();
-			detailledMsg.post<0>();
+			meanMsg = float(mean) * 3.3f * SHUNT_CONDUCTIVITY / float(ADC_RESOLUTION) / float(buffer->size());
+			meanMsg.invokeDirectly<0>();
 		}
 	}
 
@@ -177,7 +197,7 @@ public:
 		TIM_CCR2(AUX_TIMER)  = enableConfig;
 	}
 
-	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", this, (pwmdriver::PwmOffTimer+pwmdriver::PwmAmplitude)/2};
+	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", "H", this, (pwmdriver::PwmOffTimer+pwmdriver::PwmAmplitude)/2};
 
 
 	void init(unsigned int) override {
@@ -208,6 +228,7 @@ extern "C" {
 static systemTime_t lastISRTime;
 static systemTime_t lastISRDelay;
 void dma2_stream4_isr(void) {
+	ISRTime isrTimer;
 	lastISRDelay = SystemTime::get().getSystemTimeUS() - lastISRTime;
 	lastISRTime = SystemTime::get().getSystemTimeUS();
 

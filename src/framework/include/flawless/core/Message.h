@@ -27,12 +27,15 @@ public:
 	operator bool() const {
 		return mMsg;
 	}
-
-	T& operator*() {
-		return **mMsg;
+	operator T() const {
+		return *(mMsg->get());
 	}
-	T const& operator*() const {
-		return **mMsg;
+
+	T* operator->() {
+		return mMsg->get();
+	}
+	T const* operator->() const {
+		return mMsg->get();
 	}
 
 	Message<T>& operator=(Message<T> const& rhs) {
@@ -75,7 +78,7 @@ void Message<T>::post()
 {
 	flawless::LockGuard lock;
 
-	if (not *this) {
+	if (not mMsg) {
 		return;
 	}
 
@@ -91,7 +94,7 @@ template<typename T>
 template<msgID_t msgID>
 void Message<T>::invokeDirectly()
 {
-	if (not *this) {
+	if (not mMsg) {
 		return;
 	}
 	flawless::ListenerManager<T, msgID>::get().invoke(mMsg);

@@ -64,8 +64,8 @@ public:
 		if (ep == COM_USB_OUT_ENDPOINT_NO) {
 			flawless::Packet packet = flawless::MessageBufferManager<flawless::Packet_>::get().getFreeMessage();
 			if (packet) {
-				(*packet).len = usbd_ep_read_packet(usbd_dev, ep, &(*packet).buffer, MAX_PACKET_SIZE);
-				(*packet).iface = this;
+				packet->len = usbd_ep_read_packet(usbd_dev, ep, packet->buffer.data(), MAX_PACKET_SIZE);
+				packet->iface = this;
 				packet.post<MSG_ID_INCOMMING_PACKET>();
 			} else {
 				flawless::MessageBufferManager<flawless::Packet_>::get().getFreeMessage();

@@ -21,6 +21,7 @@ public:
 			while (handle) {
 				totalPackeLen += 2;
 				totalPackeLen += strlen(handle->getName())+1;
+				totalPackeLen += strlen(handle->getFormat())+1;
 				handle = handle->mNext;
 			}
 			iface->startPacket(mEPNum, totalPackeLen);
@@ -30,6 +31,7 @@ public:
 				uint16_t paramLen = handle->getSize();
 				iface->sendPacket(&paramLen, sizeof(paramLen));
 				iface->sendPacket(handle->getName(), strlen(handle->getName())+1);
+				iface->sendPacket(handle->getFormat(), strlen(handle->getFormat())+1);
 				handle = handle->mNext;
 			}
 		} else if (1 == len) {

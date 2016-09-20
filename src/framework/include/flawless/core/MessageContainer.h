@@ -24,6 +24,10 @@ public:
 		return mMessage;
 	}
 
+	T* get() {
+		return &mMessage;
+	}
+
 private:
 	T mMessage;
 };

@@ -8,7 +8,6 @@ MEMORY
 
 /* Enforce emmition of the vector table. */
 EXTERN (vector_table)
-
 ENTRY(reset_handler)
 
 /* Define sections. */

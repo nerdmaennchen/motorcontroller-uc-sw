@@ -2,11 +2,12 @@
 
 #include <flawless/stdtypes.h>
 #include <flawless/module/Module.h>
-
 #include <flawless/core/MessageBufferMemory.h>
 #include <flawless/core/MessageBufferManager.h>
-
 #include <flawless/core/Listener.h>
+#include <flawless/util/Array.h>
+#include <flawless/applicationConfig/ApplicationConfig.h>
+#include <flawless/timer/swTimer.h>
 
 #include <libopencm3/stm32/f4/rcc.h>
 #include <libopencm3/stm32/f4/timer.h>
@@ -16,9 +17,7 @@
 
 #include <target/stm32f4/clock.h>
 
-#include <flawless/util/Array.h>
-#include <flawless/applicationConfig/ApplicationConfig.h>
-#include <flawless/timer/swTimer.h>
+#include <interfaces/ISRTime.h>
 
 #include "MotorCurrent.h"
 
@@ -53,9 +52,26 @@ using CommmutationPatternContainer = Array<CommutationPattern, commutationPatter
 
 namespace {
 
-flawless::ApplicationConfig<CommmutationPatternContainer> gCommutationPattern {"commutationPattern"};
+flawless::ApplicationConfig<CommmutationPatternContainer> gCommutationPattern {"commutationPattern", "9600H"};
 uint32_t gLastSetSNDTR;
 DriverInterface* gCurrentInterface;
+
+struct : public flawless::Listener<MotorCurrent, 0>
+{
+	flawless::ApplicationConfig<MotorCurrent> mMotorCurrentMean{"motorCurrentMean", "f"};
+	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", "f", 0.2f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", "f", 0.1f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"currentError", "f"};
+	float currentOutputScale {1.f};
+	void callback(flawless::Message<MotorCurrent> const& motorCurrent) override {
+		mMotorCurrentMean = motorCurrent;
+		mCurrentError = mMotorCurrentMean - mMaxCurrent * currentOutputScale;
+		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * (1.f + (mMotorCurrentMean-mMaxCurrent*currentOutputScale) * mCurrentP);
+		targetAmplitude = std::max(PwmAmplitude+PwmOffTimer, std::min(uint32_t(0xffff), targetAmplitude));
+		TIM_ARR(PWM_TIMER)   = targetAmplitude;
+	}
+} currentController;
+
 }
 
 
@@ -136,6 +152,15 @@ void Driver::claim(DriverInterface* interface) {
 	gCurrentInterface = interface;
 }
 
+
+void Driver::setPower(float power) {
+	power = std::min(1.f, std::max(0.f, power));
+	currentController.currentOutputScale = power;
+}
+float Driver::getPower() {
+	return currentController.currentOutputScale;
+}
+
 namespace {
 struct __attribute__((packed)) ManualStepsParams {
 	uint32_t startStep;
@@ -149,7 +174,7 @@ struct : public flawless::Callback<ManualStepsParams&, bool> {
 			pwmdriver::Driver::get().runSteps(step.startStep, step.stepCnt, step.mHZ, step.cyclic);
 		}
 	}
-	flawless::ApplicationConfig<ManualStepsParams> mStep {"manualSteps", this};
+	flawless::ApplicationConfig<ManualStepsParams> mStep {"manualSteps", "IIIb", this};
 } manualStepsHelper;
 
 struct : public flawless::Callback<Array<uint16_t, 4>&, bool> {
@@ -163,7 +188,7 @@ struct : public flawless::Callback<Array<uint16_t, 4>&, bool> {
 			TIM_CCR4(PWM_TIMER) = manPWMs[3];
 		}
 	}
-	flawless::ApplicationConfig<Array<uint16_t, 4>> mManualPWM {"manualPWM", this};
+	flawless::ApplicationConfig<Array<uint16_t, 4>> mManualPWM {"manualPWM", "4H", this};
 } manualPWMHelper;
 
 struct : public flawless::Callback<bool&, bool> {
@@ -172,12 +197,9 @@ struct : public flawless::Callback<bool&, bool> {
 			pwmdriver::Driver::get().setEnabled(enable);
 		}
 	}
-	flawless::ApplicationConfig<bool> mEnable {"enable", this};
+	flawless::ApplicationConfig<bool> mEnable {"enable", "B", this};
 } enableHelper;
 
-}
-
-namespace {
 struct InitHelper : public flawless::Module {
 	InitHelper(unsigned int level) : flawless::Module(level) {}
 
@@ -236,9 +258,9 @@ struct InitHelper : public flawless::Module {
 		TIM_EGR(DMA_TRIGGER_TIMER)  = TIM_EGR_UG;
 		TIM_DIER(DMA_TRIGGER_TIMER) = TIM_DIER_UDE;
 
-		while (0 != (DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_EN)) {
+		do {
 			DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) &= ~DMA_CR_EN;
-		}
+		} while (0 != (DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_EN));
 
 		DMA_SFCR(CCR_DMA, CCR_DMA_STREAM) = DMA_FCR_DMDIS | DMA_FCR_FTH_50;
 		DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) =
@@ -259,22 +281,3 @@ struct InitHelper : public flawless::Module {
 } initHelper(5);
 }
 
-namespace {
-
-struct : public flawless::Listener<MotorCurrent, 0>
-{
-	flawless::ApplicationConfig<MotorCurrent> mMotorCurrentMean{"motorCurrentMean"};
-	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", 0.2f};
-	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", 0.1f};
-	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"currentError"};
-
-	void callback(flawless::Message<MotorCurrent> const& motorCurrent) override {
-		mMotorCurrentMean = *motorCurrent;
-		mCurrentError = mMotorCurrentMean - mMaxCurrent;
-		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * (1.f + (mMotorCurrentMean-mMaxCurrent) * mCurrentP);
-		targetAmplitude = std::max(PwmAmplitude+PwmOffTimer, std::min(uint32_t(0xffff), targetAmplitude));
-		TIM_ARR(PWM_TIMER)   = targetAmplitude;
-	}
-} currentController;
-
-}

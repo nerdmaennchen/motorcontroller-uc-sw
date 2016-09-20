@@ -15,6 +15,8 @@
 #include <libopencm3/stm32/f4/rcc.h>
 #include <libopencm3/stm32/nvic.h>
 
+#include <interfaces/ISRTime.h>
+
 #include "clock.h"
 
 #define HW_TIMER TIM5
@@ -24,6 +26,7 @@
 extern "C" {
 void tim5_isr()
 {
+	ISRTime isrTimer;
 	TIM_SR(HW_TIMER) = 0;
 	flawless::SWTimer::get().trigger();
 }

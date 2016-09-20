@@ -123,6 +123,7 @@ extern void WEAK dcmi_isr(void);
 extern void WEAK cryp_isr(void);
 extern void WEAK hash_rng_isr(void);
 
+__attribute__((used))
 __attribute__ ((section(".vectors")))
 void (*const vector_table[]) (void) = {
 	(void(*)())&_stack,

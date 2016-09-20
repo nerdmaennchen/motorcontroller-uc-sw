@@ -16,20 +16,20 @@ def fetchConfig(dev):
 #	print(ep, l)
 	ret = collections.OrderedDict()
 	idx = 0
-	while l > 0:
-		if len(msg) == 0 or not 0 in msg[2:]:
-			msg = msg + dev.read(0x81, 64, 1000)
-#			print("reading", msg)
-		else:
-			while len(msg) != 0 and 0 in msg[2:]:
-				(valLen,) = paramHelper.unpack(msg[:2])
-				msg = msg[2:]
-				strLen = msg.index(0)+1
-				valName = msg[:strLen-1].tostring().decode("utf-8")
-				ret[valName] = (idx, valLen)
-				idx = idx + 1
-				l = l - 2 - strLen
-				msg = msg[strLen:]
+	while len(msg) < l:
+		msg = msg + dev.read(0x81, 64, 1000)
+	while len(msg) > 0 and 0 in msg[2:]:
+		(valLen,) = paramHelper.unpack(msg[:2])
+		msg = msg[2:]
+		nameLen = msg.index(0)+1
+		nameStr = msg[:nameLen-1].tostring().decode("utf-8")
+		msg = msg[nameLen:]
+		formatStrLen = msg.index(0)+1
+		formatStr = msg[:formatStrLen-1].tostring().decode("utf-8")
+		msg = msg[formatStrLen:]
+		
+		ret[nameStr] = (idx, valLen, formatStr)
+		idx = idx + 1
 	return ret
 
 def argsToMsg(args):
@@ -63,26 +63,26 @@ def autoconvert(s):
 def setConfig(dev, configs, target, values, verbose=True):
 	if target in configs:
 		size = configs[target][1]
-		if size == len(values):
-			dev.write(0x01, st.pack('=BB', 1, configs[target][0]) + values)
+		t = configs[target]
+		packedValues = st.pack(t[2], *values)
+		if size == len(packedValues):
+			dev.write(0x01, st.pack('=BB', 1, t[0]) + packedValues)
 			if verbose:
 				print("set " + target + " to " + str(values))
 		else:
-			print("wrong size!\n expected len: " + str(size) + " got: " + str(len(values)))
+			print("wrong size!\n expected: " + str(t[2]) + " got: " + str(values))
 	else:
 		print(target + " not in " + str(configs))
 
 def getConfig(dev, configs, target):
 	if target in configs:
-#		print("sending: " + str(st.pack('=BB', 1, configs[target][0]))) 
-		dev.write(0x01, st.pack('=BB', 1, configs[target][0]))
-		size = configs[target][1] + 3
-#		print("expecting " + str(size) + " bytes")
+		t = configs[target]
+		dev.write(0x01, st.pack('=BB', 1, t[0]))
+		size = t[1] + 3
 		msg = array('B')
 		while len(msg) < size:
 			msg += dev.read(0x81, 64, 10)
-#			print(msg)
-		return msg[3:]
+		return st.unpack(t[2], msg[3:])
 	else:
 		print(target + " not in " + str(configs))
 		
@@ -123,15 +123,14 @@ if __name__ == "__main__":
 		exit(0)
 		
 #format: [progname] set target [formatstr (params)*]
-	if len(sys.argv) >= 3 and sys.argv[1] == "set":
+	if len(sys.argv) >= 2 and sys.argv[1] == "set":
 		target = sys.argv[2]
 		args = []
-		msg = bytearray()
-		if len(sys.argv) >= 5:
-			for s in sys.argv[4:]:
+		msg = ()
+		if len(sys.argv) >= 3:
+			for s in sys.argv[3:]:
 				args.append(autoconvert(s))
-#			print(args)
-			msg = st.pack(sys.argv[3], *args)
+			msg = tuple(args)
 		setConfig(dev, configs, target, msg)
 		
 	if len(sys.argv) >= 3 and sys.argv[1] == "get":

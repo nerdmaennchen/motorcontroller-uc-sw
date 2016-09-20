@@ -18,7 +18,7 @@ constexpr uint32_t TotalTickCnt = StepsCount * TicksPerStep;
 using CommutationPattern = Array<uint16_t, TicksPerStep>;
 
 struct DriverInterface {
-
+	virtual void unclaim() = 0;
 };
 
 class Driver : public flawless::util::Singleton<pwmdriver::Driver> {
@@ -37,6 +37,10 @@ class Driver : public flawless::util::Singleton<pwmdriver::Driver> {
 		void setEnabled(bool enabled);
 
 		void claim(DriverInterface* interface);
+
+		// set a power scaling factor (between 0 and 1)
+		void setPower(float power);
+		float getPower();
 };
 
 }

@@ -6,6 +6,8 @@
  */
 
 #include "interfaces/usb.h"
+#include <interfaces/ISRTime.h>
+
 #include <flawless/timer/swTimer.h>
 
 #include <stdlib.h>
@@ -183,6 +185,7 @@ static void usb_set_config_callback(usbd_device *usbd_dev, uint16_t wValue)
 
 void otg_fs_isr()
 {
+	ISRTime isrTimer;
 	usbd_poll(g_usbd_dev);
 }
 }

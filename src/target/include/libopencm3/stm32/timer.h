@@ -55,6 +55,7 @@ LGPL License Terms @ref lgpl_license
 #define TIM6				TIM6_BASE
 #define TIM7				TIM7_BASE
 #define TIM8				TIM8_BASE
+#define TIM9				TIM9_BASE
 /**@}*/
 
 /* --- Timer registers ----------------------------------------------------- */

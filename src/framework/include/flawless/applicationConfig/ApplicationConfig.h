@@ -10,10 +10,11 @@ namespace flawless
 
 class ApplicationConfigBase : public flawless::util::LinkedListNode<ApplicationConfigBase> {
 public:
-	ApplicationConfigBase(const char* _name) : name(_name) {}
+	ApplicationConfigBase(const char* _name, const char* _format) : name(_name), format(_format) {}
 	virtual ~ApplicationConfigBase() {}
 
-	char const* getName() const { return (name); }
+	char const* getName() const { return name; }
+	char const* getFormat() const { return format; }
 
 	virtual void setValue(void const* vals) = 0;
 	virtual void const* getValue() = 0;
@@ -21,6 +22,7 @@ public:
 
 private:
 	const char* name;
+	const char* format;
 };
 
 template<typename T>
@@ -31,10 +33,10 @@ class ApplicationConfig final : public ApplicationConfigBase
 	callbackType* mCB {nullptr};
 public:
 
-	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name) {}
-	ApplicationConfig(const char* _name, callbackType* cb) : ApplicationConfigBase(_name), mCB(cb) {}
-	ApplicationConfig(const char* _name, T const& val) : ApplicationConfigBase(_name), value(val) {}
-	ApplicationConfig(const char* _name, callbackType* cb, T const& val) : ApplicationConfigBase(_name), value(val), mCB(cb) {}
+	ApplicationConfig(const char* _name, const char* _format) : ApplicationConfigBase(_name, _format) {}
+	ApplicationConfig(const char* _name, const char* _format, callbackType* cb) : ApplicationConfigBase(_name, _format), mCB(cb) {}
+	ApplicationConfig(const char* _name, const char* _format, T const& val) : ApplicationConfigBase(_name, _format), value(val) {}
+	ApplicationConfig(const char* _name, const char* _format, callbackType* cb, T const& val) : ApplicationConfigBase(_name, _format), value(val), mCB(cb) {}
 
 	uint16_t getSize() const override {
 		return sizeof(T);
@@ -84,8 +86,8 @@ class ApplicationConfig<void> final : public ApplicationConfigBase
 	callbackType* mCB {nullptr};
 public:
 
-	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name) {}
-	ApplicationConfig(const char* _name, callbackType* cb) : ApplicationConfigBase(_name), mCB(cb) {}
+	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name, "") {}
+	ApplicationConfig(const char* _name, callbackType* cb) : ApplicationConfigBase(_name, ""), mCB(cb) {}
 
 	void const* getValue() override { return nullptr; };
 	uint16_t getSize() const override { return 0; };

@@ -9,6 +9,7 @@
 
 #include <target/stm32f4/clock.h>
 #include "interfaces/systemTime.h"
+#include <interfaces/ISRTime.h>
 
 #include <libopencm3/stm32/f4/timer.h>
 #include <libopencm3/stm32/f4/rcc.h>
@@ -26,6 +27,7 @@ extern "C"
 {
 void tim2_isr()
 {
+	ISRTime isrTimer;
 	g_systemTimeHighPart += 1;
 	TIM_SR(SYSTEM_TIME_TIMER) = 0;
 }
