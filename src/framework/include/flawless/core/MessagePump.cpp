@@ -4,6 +4,7 @@
 #include "flawless/platform/system.h"
 
 #include <flawless/util/Array.h>
+#include "interfaces/ISRTime.h"
 
 namespace flawless
 {
@@ -32,6 +33,7 @@ void MessagePump::run()
 	while (true)
 	{
 		if (gMsgQueueSize) {
+			WorkingTime workingTime;
 			Post& head = gMsgQueue[gMsgQueueHead];
 			head.invoke();
 			{

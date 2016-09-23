@@ -35,9 +35,9 @@ struct BLDC_driver final :
 	flawless::ApplicationConfig<int> mLastKnownPhase                {"bldc_cur_phase", "i", 0};
 
 	flawless::ApplicationConfig<PIDControllerParams> mControllerParams {"bldc_controller", "6f", {0.f,0.f,0.f,
-			1.e-3, // default P
-			1.e-2,  // default I
-			1.5e-4f,
+			2.5e-4, // default P
+			2.e-2,  // default I
+			2.6e-4f,
 	}};
 
 	PIDController mController{&(mControllerParams.get())};

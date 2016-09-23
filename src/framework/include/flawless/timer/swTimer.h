@@ -25,7 +25,7 @@ private:
 	void setupTimer();
 };
 
-class TimerCallback : public virtual flawless::Callback<void> {
+class TimerCallback : public flawless::Callback<void> {
 public:
 	TimerCallback() {}
 	TimerCallback(timerInterval_t interval, bool repeating) {start(interval, repeating);}
