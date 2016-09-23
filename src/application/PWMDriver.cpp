@@ -90,6 +90,7 @@ void Driver::runSteps(uint32_t stepStart, uint32_t stepCnt, uint32_t mHZ, bool c
 	} while (0 != (DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_EN));
 
 	TIM_CR1(DMA_TRIGGER_TIMER) &= ~TIM_CR1_CEN;
+	TIM_SR(DMA_TRIGGER_TIMER) = 0;
 	DMA_LIFCR(CCR_DMA) = 0x3d << 16;
 
 	DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) &(gCommutationPattern.get()[stepStart]);

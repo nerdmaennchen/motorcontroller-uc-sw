@@ -10,7 +10,7 @@ template<typename T, size_t N, typename Lock = int>
 class FIFO final {
 public:
 	size_t put(T const& _val) {
-		Lock lock;
+		Lock __attribute__((unused)) lock;
 		if (mCount < N) {
 			mStorage[mEnd] = _val;
 			mEnd = (mEnd + 1) % N;
@@ -21,7 +21,7 @@ public:
 	}
 
 	size_t put(T const* _vals, size_t cnt) {
-		Lock lock;
+		Lock __attribute__((unused)) lock;
 		size_t p = 0;
 		while (p < cnt && put(_vals[p])) {
 			++p;
@@ -30,7 +30,7 @@ public:
 	}
 
 	size_t peek(T const*& target) {
-		Lock lock;
+		Lock __attribute__((unused)) lock;
 		target = nullptr;
 		if (mCount > 0) {
 			target = &(mStorage[mStart]);
@@ -41,16 +41,20 @@ public:
 	}
 
 	void pop(size_t cnt) {
-		Lock lock;
+		Lock __attribute__((unused)) lock;
 		if (cnt <= mCount) {
 			mStart = (mStart + cnt) % N;
 			mCount -= cnt;
 		} else {
-			// reset the entire fifo
-			mStart = 0;
-			mEnd = 0;
-			mCount = 0;
+			clear();
 		}
+	}
+
+	void clear() {
+		Lock __attribute__((unused)) lock;
+		mStart = 0;
+		mEnd = 0;
+		mCount = 0;
 	}
 
 	T& operator[](size_t idx) {

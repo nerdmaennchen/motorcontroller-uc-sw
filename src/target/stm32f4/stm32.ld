@@ -13,9 +13,10 @@ ENTRY(reset_handler)
 /* Define sections. */
 SECTIONS
 {
+		/DISCARD/ : {}
+		
         . = ORIGIN(rom);
-
-        .text : {
+		.text : {
                 KEEP(*(.vectors))     /* Vector table */
                 *(.text*)       /* Program code */
                 . = ALIGN(4);

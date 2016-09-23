@@ -1,6 +1,7 @@
 #include <flawless/module/Module.h>
 #include <flawless/protocol/PacketHandler.h>
 #include <flawless/applicationConfig/ApplicationConfig.h>
+#include <flawless/platform/system.h>
 #include <string.h>
 
 namespace {
@@ -42,6 +43,7 @@ public:
 				if (target == idx) {
 					uint16_t paramLen = handle->getSize();
 					iface->startPacket(mEPNum, paramLen);
+					flawless::LockGuard lock;
 					iface->sendPacket(handle->getValue(), paramLen);
 					break;
 				}

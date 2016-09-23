@@ -39,25 +39,24 @@ const usb_endpoint_descriptor in_usb_ep_descriptor =
 	/* .extralen = */ 0,
 };
 
-class USBComModule : public flawless::Module, public flawless::PhyInterface, public usb_ep_callback {
+struct USBComModule : public flawless::Module, public flawless::PhyInterface, public usb_ep_callback, public usb_ep_set_config_callback {
 	USBManager& manager = USBManager::get();
 
 	flawless::FIFO<uint8_t, 256, flawless::LockGuard> mTxFifo;
 
-	class : public usb_ep_set_config_callback {
-		void callback(usbd_device *usbd_dev, uint16_t) override {
-			UNUSED(usbd_dev);
-//			usbd_ep_write_packet(usbd_dev, COM_USB_OUT_ENDPOINT_NO, NULL, 0, MAX_PACKET_SIZE);
-		}
-	} usbSetConfigCallback;
+	SystemTime &time = SystemTime::get();
 
-public:
 	USBComModule(unsigned int level) : flawless::Module(level), flawless::PhyInterface(0) {}
 	~USBComModule() {}
 
 	void init(unsigned int) {
-		manager.usb_register_endpoint(&in_usb_ep_descriptor, MAX_PACKET_SIZE, this , nullptr);
-		manager.usb_register_endpoint(&out_usb_ep_descriptor, MAX_PACKET_SIZE, this, &usbSetConfigCallback);
+		manager.usb_register_endpoint(&in_usb_ep_descriptor, MAX_PACKET_SIZE, this , this);
+		manager.usb_register_endpoint(&out_usb_ep_descriptor, MAX_PACKET_SIZE, this, nullptr);
+	}
+
+	void callback(usbd_device *usbd_dev, uint16_t) override {
+		UNUSED(usbd_dev);
+		mTxFifo.clear();
 	}
 
 	void callback(usbd_device *usbd_dev, uint8_t ep) override {
@@ -83,7 +82,10 @@ public:
 					++i;
 				}
 				uint16_t len = usbd_ep_write_packet(usbd_dev, ep, buf.data(), i, MAX_PACKET_SIZE);
-				mTxFifo.pop(len);
+				if (len) {
+					mTxFifo.pop(len);
+					packetTimeout = time.getSystemTimeUS() + 1000000;
+				}
 			} else {
 				mSending = false;
 			}
@@ -96,28 +98,35 @@ public:
 	}
 
 	void startPacket(uint8_t epNum, uint16_t totalLen) override {
-		mTxFifo.put(epNum);
-		mTxFifo.put((totalLen >> 0) & 0xff);
-		mTxFifo.put((totalLen >> 8) & 0xff);
+		size_t stored  = mTxFifo.put(epNum);
+		stored += mTxFifo.put((totalLen >> 0) & 0xff);
+		stored += mTxFifo.put((totalLen >> 8) & 0xff);
 		mCurPacketLen = totalLen;
 	}
 
 	void sendPacket(void const* msg, uint16_t len)
 	{
 		uint8_t const* msgCast = (uint8_t const*)msg;
-		while (len) {
+		systemTime_t now;
+		do {
 			size_t stored = mTxFifo.put(msgCast, len);
 			msgCast += stored;
 			len -= stored;
 			mCurPacketLen -= stored;
 			flawless::LockGuard lock;
 			if ((not mSending) and ((mTxFifo.countFree() == 0) or (mCurPacketLen == 0))) {
-				callback(manager.getUSBDevice(), COM_USB_IN_ENDPOINT_OUT_NO);
+				callback(manager.getUSBDevice(), uint8_t(COM_USB_IN_ENDPOINT_OUT_NO));
 			}
+			now = time.getSystemTimeUS();
+		} while (len and now < packetTimeout);
+		if (len) {
+			flawless::LockGuard lock;
+			mTxFifo.clear();
+			mSending = false;
 		}
 	}
 
-private:
+	systemTime_t packetTimeout;
 	uint16_t mCurPacketLen {0};
 	bool mSending {false};
 };

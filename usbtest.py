@@ -6,7 +6,7 @@ import collections
 import sys
 
 def fetchConfig(dev):
-	dev.write(0x01, st.pack('=B', 1))
+	assert(dev.write(0x01, st.pack('=B', 1)) == 1)
 	msg = dev.read(0x81, 64, 1000)
 #	print("reading", msg)
 	headerHelper = st.Struct('=BH')
@@ -81,7 +81,7 @@ def getConfig(dev, configs, target):
 		size = t[1] + 3
 		msg = array('B')
 		while len(msg) < size:
-			msg += dev.read(0x81, 64, 10)
+			msg += dev.read(0x81, 64, 1000)
 		return st.unpack(t[2], msg[3:])
 	else:
 		print(target + " not in " + str(configs))
@@ -111,7 +111,7 @@ if __name__ == "__main__":
 	if dev is None:
 		raise ValueError('Device not found')
 
-	dev.set_configuration()
+	dev.set_configuration(1)
 	
 	if len(sys.argv) == 2 and sys.argv[1] == "flush":
 		flush(dev)

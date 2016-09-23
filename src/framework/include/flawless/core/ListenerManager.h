@@ -12,7 +12,7 @@ class ListenerManager : public flawless::util::Singleton<ListenerManager<T, msgI
 public:
 	void invoke(MessageContainerBase* msg) override {
 		Listener<T, msgID>* listener = flawless::util::LinkedList<Listener<T, msgID>>::get().mFirst;
-		Message<T> typedMsg = Message<T>((MessageContainer<T>*)msg);
+		Message<T> typedMsg = Message<T>(reinterpret_cast<MessageContainer<T>*>(msg));
 		while (listener) {
 			listener->callback(typedMsg);
 			listener = listener->mNext;

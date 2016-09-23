@@ -27,11 +27,6 @@
 #include <cmath>
 
 
-namespace
-{
-flawless::MessageBufferMemory<int, 5> intMsgBuf;
-}
-
 #define SENSE_PORT GPIOC
 #define SENSE_PIN_A GPIO0
 #define SENSE_PIN_B GPIO1

@@ -87,6 +87,8 @@ void Message<T>::post()
 	if (dispatchSuccess) {
 		mMsg->unlock();
 		mMsg = nullptr;
+	} else {
+		return;
 	}
 }
 

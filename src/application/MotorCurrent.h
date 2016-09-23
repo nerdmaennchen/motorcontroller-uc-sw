@@ -3,7 +3,7 @@
 #include <flawless/stdtypes.h>
 #include <flawless/util/Array.h>
 
-#define SMOOTHING_CNT (4)
+#define SMOOTHING_CNT (32)
 
 struct MotorCurrentMeasure {
 	// current in uA

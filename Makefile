@@ -10,7 +10,7 @@ SIZE    = $(CROSS_COMPILE_PREFIX)size
 GDB     = $(CROSS_COMPILE_PREFIX)gdb
 OBJ_CPY = $(CROSS_COMPILE_PREFIX)objcopy
 
-LIBS = m nosys gcc
+LIBS = nosys
 LIB_PATHS =
 INCLUDES = src/ \
 	src/target/include \
@@ -33,36 +33,39 @@ COMMON_FLAGS	+= $(DEFINES) $(FP_FLAGS)
 COMMON_FLAGS	+= -mthumb -mcpu=cortex-m4
 COMMON_FLAGS	+= -O0 -g3
 COMMON_FLAGS	+= $(INCLUDE_CMD)
+COMMON_FLAGS	+= -fvisibility=hidden
+COMMON_FLAGS	+= -fno-common -ffunction-sections -fdata-sections
+
+# Warnings
+W_FLAGS      += -Wextra -Wshadow -Wredundant-decls
+W_FLAGS      += -Wall -Wundef
 
 ###############################################################################
 # C flags
 
 CFLAGS		+= $(COMMON_FLAGS)
-CFLAGS		+= -Wextra -Wshadow -Wimplicit-function-declaration
-CFLAGS		+= -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes
-CFLAGS		+= -fno-common -ffunction-sections -fdata-sections
+CFLAGS		+= $(W_FLAGS)
+CFLAGS      += -Wimplicit-function-declaration -Wmissing-prototypes -Wstrict-prototypes
 
 ###############################################################################
 # C++ flags
 
 CPPFLAGS	+= $(COMMON_FLAGS)
-CPPFLAGS	+= -Wextra -Wshadow -Wredundant-decls
-CPPFLAGS	+= -fno-common -ffunction-sections -fdata-sections
-CPPFLAGS	+= -std=c++11 -fvisibility=hidden -frepo -fno-rtti
+CPPFLAGS	+= $(W_FLAGS)
+CPPFLAGS    += -frepo -fno-rtti
+CPPFLAGS	+= -std=c++11
 CPPFLAGS	+= -MD
-CPPFLAGS	+= -Wall -Wundef
 CPPFLAGS	+= -I$(INCLUDE_DIR)
 
 ###############################################################################
 # Linker flags
 
-LINKERFLAGS += --static -nostartfiles -mthumb  $(FP_FLAGS)
+LINKERFLAGS += --static -nostartfiles $(COMMON_FLAGS)
 LINKERFLAGS += -Wl,--gc-sections
 LINKERFLAGS += -Wl,-Map=$(TARGET).map
 LINKERFLAGS += -Wl,--start-group
 LINKERFLAGS += -T$(LINKER_SCRIPT_FILE)
-LINKERFLAGS += -mthumb -mcpu=cortex-m4 -fvisibility=hidden 
-LINKERFLAGS +=  -fvisibility=hidden -frepo -fno-rtti
+#LINKERFLAGS += -s
 
 CPP_SUFFIX = .cpp
 C_SUFFIX   = .c
@@ -110,7 +113,7 @@ dbg:
 $(TARGET).elf: $(CPP_OBJ_FILES) $(C_OBJ_FILES)
 	$(SILENT) echo linking $(target)
 	$(SILENT) $(LD) -o $@ $^ $(LINKERFLAGS) $(LIB_PATH_CMD) $(LIB_CMD)
-	$(SIZE) $@
+	$(SILENT) $(SIZE) $@
 	@ echo done
 
 $(OBJ_DIR)%$(C_SUFFIX)$(OBJ_SUFFIX): %$(C_SUFFIX) $(LINKER_SCRIPT_FILE)
@@ -124,7 +127,7 @@ $(OBJ_DIR)%$(C_SUFFIX)$(OBJ_SUFFIX): %$(C_SUFFIX) $(LINKER_SCRIPT_FILE)
 	$(SILENT) $(CC) $(CFLAGS) $(INCLUDE_CMD) -o $@ -c $<
 	
 	
-$(OBJ_DIR)%$(CPP_SUFFIX)$(OBJ_SUFFIX): %$(CPP_SUFFIX) $(LINKER_SCRIPT_FILE)
+$(OBJ_DIR)%$(CPP_SUFFIX)$(OBJ_SUFFIX): %$(CPP_SUFFIX)
 	@echo building $<
 	@ mkdir -p $(dir $@)
 	@ $(CPP) $(CPPFLAGS) $(INCLUDE_CMD) -MM -MF $(OBJ_DIR)$<.d -c $<
