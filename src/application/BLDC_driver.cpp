@@ -74,7 +74,7 @@ struct BLDC_driver final :
 				mControllerParams->errorP = 0;
 				mControllerParams->errorI = 0;
 			} else {
-				driver->setPower(1.f);
+				driver->setPower(0.f);
 			}
 		}
 	}
