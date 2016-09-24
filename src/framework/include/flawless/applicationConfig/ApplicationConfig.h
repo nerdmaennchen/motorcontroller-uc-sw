@@ -10,33 +10,33 @@ namespace flawless
 
 class ApplicationConfigBase : public flawless::util::LinkedListNode<ApplicationConfigBase> {
 public:
-	ApplicationConfigBase(const char* _name, const char* _format) : name(_name), format(_format) {}
 	virtual ~ApplicationConfigBase() {}
 
-	char const* getName() const { return name; }
-	char const* getFormat() const { return format; }
+	virtual char const* getName() const = 0;
+	virtual char const* getFormat() const = 0;
 
 	virtual void setValue(void const* vals) = 0;
 	virtual void const* getValue() = 0;
 	virtual uint16_t getSize() const = 0;
-
-private:
-	const char* name;
-	const char* format;
 };
 
 template<typename T>
 class ApplicationConfig final : public ApplicationConfigBase
 {
+	const char* name;
+	const char* format;
 	T value;
 	using callbackType = Callback<T&, bool>;
 	callbackType* mCB {nullptr};
 public:
 
-	ApplicationConfig(const char* _name, const char* _format) : ApplicationConfigBase(_name, _format) {}
-	ApplicationConfig(const char* _name, const char* _format, callbackType* cb) : ApplicationConfigBase(_name, _format), mCB(cb) {}
-	ApplicationConfig(const char* _name, const char* _format, T const& val) : ApplicationConfigBase(_name, _format), value(val) {}
-	ApplicationConfig(const char* _name, const char* _format, callbackType* cb, T const& val) : ApplicationConfigBase(_name, _format), value(val), mCB(cb) {}
+	ApplicationConfig(const char* _name, const char* _format) : name(_name), format(_format)  {}
+	ApplicationConfig(const char* _name, const char* _format, callbackType* cb) : name(_name), format(_format), mCB(cb) {}
+	ApplicationConfig(const char* _name, const char* _format, T const& val) : name(_name), format(_format), value(val) {}
+	ApplicationConfig(const char* _name, const char* _format, callbackType* cb, T const& val) : name(_name), format(_format), value(val), mCB(cb) {}
+
+	char const* getName() const override { return name; }
+	char const* getFormat() const override { return format; }
 
 	uint16_t getSize() const override {
 		return sizeof(T);
@@ -82,12 +82,17 @@ public:
 template<>
 class ApplicationConfig<void> final : public ApplicationConfigBase
 {
+	const char* name;
+	const char* format;
 	using callbackType = Callback<void>;
 	callbackType* mCB {nullptr};
 public:
 
-	ApplicationConfig(const char* _name) : ApplicationConfigBase(_name, "") {}
-	ApplicationConfig(const char* _name, callbackType* cb) : ApplicationConfigBase(_name, ""), mCB(cb) {}
+	ApplicationConfig(const char* _name) : name(_name), format("") {}
+	ApplicationConfig(const char* _name, callbackType* cb) : name(_name), format(""), mCB(cb) {}
+
+	char const* getName() const override { return name; }
+	char const* getFormat() const override { return format; }
 
 	void const* getValue() override { return nullptr; };
 	uint16_t getSize() const override { return 0; };
