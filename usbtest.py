@@ -81,7 +81,7 @@ def getConfig(dev, configs, target):
 		size = t[1] + 3
 		msg = array('B')
 		while len(msg) < size:
-			msg += dev.read(0x81, 64, 1000)
+			msg += dev.read(0x81, 64, 10)
 		return st.unpack(t[2], msg[3:])
 	else:
 		print(target + " not in " + str(configs))
