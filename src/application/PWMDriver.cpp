@@ -52,16 +52,16 @@ using CommmutationPatternContainer = Array<CommutationPattern, commutationPatter
 
 namespace {
 
-flawless::ApplicationConfig<CommmutationPatternContainer> gCommutationPattern {"commutationPattern", "9600H"};
+flawless::ApplicationConfig<CommmutationPatternContainer> gCommutationPattern {"commutation_pattern", "9600H"};
 uint32_t gLastSetSNDTR;
 DriverInterface* gCurrentInterface;
 
 struct : public flawless::Listener<MotorCurrent, 0>
 {
-	flawless::ApplicationConfig<MotorCurrent> mMotorCurrentMean{"motorCurrentMean", "f"};
-	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", "f", 0.5f};
-	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", "f", 1.f};
-	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"currentError", "f"};
+	flawless::ApplicationConfig<MotorCurrent> mMotorCurrentMean{"motor_current", "f"};
+	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"max_motor_current", "f", 0.5f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"motor_current_controll_p", "f", 1.f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"motor_current_error", "f"};
 	float currentOutputScale {1.f};
 	void callback(flawless::Message<MotorCurrent> const& motorCurrent) override {
 		mMotorCurrentMean = motorCurrent;
@@ -176,7 +176,7 @@ struct : public flawless::Callback<ManualStepsParams&, bool> {
 			pwmdriver::Driver::get().runSteps(step.startStep, step.stepCnt, step.mHZ, step.cyclic);
 		}
 	}
-	flawless::ApplicationConfig<ManualStepsParams> mStep {"manualSteps", "IIIb", this};
+	flawless::ApplicationConfig<ManualStepsParams> mStep {"manual_steps", "IIIb", this};
 } manualStepsHelper;
 
 struct : public flawless::Callback<Array<uint16_t, 4>&, bool> {
@@ -190,7 +190,7 @@ struct : public flawless::Callback<Array<uint16_t, 4>&, bool> {
 			TIM_CCR4(PWM_TIMER) = manPWMs[3];
 		}
 	}
-	flawless::ApplicationConfig<Array<uint16_t, 4>> mManualPWM {"manualPWM", "4H", this};
+	flawless::ApplicationConfig<Array<uint16_t, 4>> mManualPWM {"manual_pwm", "4H", this};
 } manualPWMHelper;
 
 struct : public flawless::Callback<bool&, bool> {
@@ -199,7 +199,7 @@ struct : public flawless::Callback<bool&, bool> {
 			pwmdriver::Driver::get().setEnabled(enable);
 		}
 	}
-	flawless::ApplicationConfig<bool> mEnable {"enable", "B", this};
+	flawless::ApplicationConfig<bool> mEnable {"enable_motor", "B", this};
 } enableHelper;
 
 struct InitHelper : public flawless::Module {

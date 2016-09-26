@@ -183,15 +183,12 @@ struct InitHelper : public flawless::Module {
 } initHelper(50);
 }
 
-flawless::ApplicationConfig<int> magicCnt{"magic_cnt", "i"};
-
 extern "C" {
 void tim1_up_tim10_isr() {
 	ISRTime isrTimer;
 	flawless::LockGuard lock;
 	int sr = TIM_SR(HALL_TIMER);
 	if ((sr & TIM_SR_UIF) && !(sr & TIM_SR_CC1IF)) {
-		magicCnt = TIM_ARR(HALL_TIMER);
 		TIM_SR(HALL_TIMER) &= ~TIM_SR_UIF;
 		hallManager.notifyTimeout(TIM_ARR(HALL_TIMER));
 	}

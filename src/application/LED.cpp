@@ -129,7 +129,7 @@ struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool
 		}
 	}
 
-	flawless::ApplicationConfig<RGBConfigs> mRGBBuffer{"ledBuffer", "15I", this};
+	flawless::ApplicationConfig<RGBConfigs> mRGBBuffer{"led_values", "15I", this};
 	Array<uint8_t, PREAMBLE_BYTES + bytesToSubstituteCnt(NUM_LEDS * 3)> mOutputBuffer;
 	uint8_t *mOutBufferAfterPreamble {0};
 } ledModule(9);

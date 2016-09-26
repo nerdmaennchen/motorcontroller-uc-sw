@@ -47,7 +47,9 @@ flawless::MessageBufferMemory<MotorCurrent, 5> currentMeanMeasurements;
 constexpr float SHUNT_CONDUCTIVITY = 20;
 #define MIN_ADC_DELAY_US 100000
 
-class MotorCurrentMeasurer final : public flawless::Module, public flawless::Callback<uint16_t&, bool>
+class MotorCurrentMeasurer final
+	: public flawless::Module
+	, public flawless::Callback<uint16_t&, bool>
 {
 	using RawMeasurementType_t = MotorCurrentMeasure;
 public:
@@ -191,8 +193,7 @@ public:
 		TIM_BDTR(AUX_TIMER) |= TIM_BDTR_MOE;
 		TIM_CCR2(AUX_TIMER)  = enableConfig;
 	}
-
-	flawless::ApplicationConfig<uint16_t> enableConfig{"enableADCDbgOutput", "H", this, (pwmdriver::PwmOffTimer+pwmdriver::PwmAmplitude)/2};
+	flawless::ApplicationConfig<uint16_t> enableConfig{"motor_current_adc_delay", "H", this, (pwmdriver::PwmOffTimer+pwmdriver::PwmAmplitude)/2};
 
 
 	void init(unsigned int) override {
