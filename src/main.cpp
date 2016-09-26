@@ -23,6 +23,8 @@ int main(void)
 	return 0;
 }
 
+
+#include <cstdlib>
 extern "C" {
 
 void* __dso_handle;
@@ -31,11 +33,10 @@ void __cxa_pure_virtual() { while(1); }
 // we dont need this here -> empty implementation
 int __cxa_atexit(void (*) (void *), void *, void *) {return 0;}
 void __register_exitproc() {}
-void free() { while(1); }
-void malloc() { while(1); }
+void free (void*) { while(1); }
+void* malloc(size_t) { while(1); return nullptr;}
 
-void atexit() {
-}
+int atexit(void (*)()) { return 0;}
 
 }
 
