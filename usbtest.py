@@ -7,7 +7,7 @@ import sys
 
 def fetchConfig(dev):
 	assert(dev.write(0x01, st.pack('=B', 1)) == 1)
-	msg = dev.read(0x81, 64, 1000)
+	msg = dev.read(0x81, 512, 1000)
 #	print("reading", msg)
 	headerHelper = st.Struct('=BH')
 	paramHelper = st.Struct('=H')
@@ -17,7 +17,7 @@ def fetchConfig(dev):
 	ret = collections.OrderedDict()
 	idx = 0
 	while len(msg) < l:
-		msg = msg + dev.read(0x81, 64, 1000)
+		msg = msg + dev.read(0x81, 512, 1000)
 	while len(msg) > 0 and 0 in msg[2:]:
 		(valLen,) = paramHelper.unpack(msg[:2])
 		msg = msg[2:]
@@ -81,7 +81,7 @@ def getConfig(dev, configs, target):
 		size = t[1] + 3
 		msg = array('B')
 		while len(msg) < size:
-			msg += dev.read(0x81, 64, 10)
+			msg += dev.read(0x81, 512, 100)
 		return st.unpack(t[2], msg[3:])
 	else:
 		print(target + " not in " + str(configs))
@@ -89,7 +89,7 @@ def getConfig(dev, configs, target):
 def flush(dev):
 	try:
 		while True:
-			msg = dev.read(0x81, 64)
+			msg = dev.read(0x81, 512)
 			print("flushed" + str(msg))
 			if len(msg) == 0:
 				break;
@@ -99,7 +99,7 @@ def flush(dev):
 def flush_(dev):
 	while True:
 		try:
-			msg = dev.read(0x81, 64)
+			msg = dev.read(0x81, 512)
 			print("flushed" + str(msg))
 			if len(msg) == 0:
 				break;

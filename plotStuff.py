@@ -12,7 +12,7 @@ def data_gen():
 			vals = vals + getConfig(dev, configs, target)
 		yield vals
 	
-numdata = 100
+numdata = 40
 xdata = list(range(0, numdata))
 def run(data):
 	# update the data
@@ -24,16 +24,14 @@ def run(data):
 		for i in range(0, len(datas)):
 			datas[i] = datas[i][-numdata:]
 	
-	ymin, ymax = ax.get_ylim()
-	mi = min(data)
-	ma = max(data)
-	if mi < ymin:
-		ymin = mi
-		ax.set_ylim(ymin, ymax)
-		ax.figure.canvas.draw()
-	if ma > ymax:
-		ymax = ma
-		ax.set_ylim(ymin, ymax)
+	mi = float('inf')
+	ma = float('-inf')
+	for d in datas:
+		mi = min(mi, min(d))
+		ma = max(ma, max(d))
+	yMin, yMax = ax.get_ylim()
+	if (yMin, yMax) != (mi, ma):
+		ax.set_ylim(mi, ma)
 		ax.figure.canvas.draw()
 
 	for i in range(0, len(datas)):

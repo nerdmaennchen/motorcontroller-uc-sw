@@ -47,7 +47,6 @@ public:
 						handle->setValue(nullptr);
 					} else {
 						iface->startPacket(mEPNum, paramLen);
-						flawless::LockGuard lock;
 						iface->sendPacket(handle->getValue(), paramLen);
 					}
 					break;

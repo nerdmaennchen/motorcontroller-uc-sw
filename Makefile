@@ -31,7 +31,7 @@ DEFINES		+= -DSTM32F4
 FP_FLAGS       ?=  -mhard-float -mfpu=fpv4-sp-d16
 COMMON_FLAGS	+= $(DEFINES) $(FP_FLAGS)
 COMMON_FLAGS	+= -mthumb -mcpu=cortex-m4
-COMMON_FLAGS	+= -O0 -g3
+COMMON_FLAGS	+= -Os -g3
 COMMON_FLAGS	+= $(INCLUDE_CMD)
 COMMON_FLAGS	+= -fvisibility=hidden
 COMMON_FLAGS	+= -fno-common -ffunction-sections -fdata-sections
