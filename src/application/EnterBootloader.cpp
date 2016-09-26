@@ -15,7 +15,7 @@ public:
 		system_reset();
 	}
 private:
-flawless::ApplicationConfig<void> enableConfig{"enterBootloader", this};
+flawless::ApplicationConfig<void> enableConfig{"reset", this};
 } enableCallback;
 
 }

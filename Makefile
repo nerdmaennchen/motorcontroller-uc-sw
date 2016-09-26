@@ -31,14 +31,15 @@ DEFINES		+= -DSTM32F4
 FP_FLAGS       ?=  -mhard-float -mfpu=fpv4-sp-d16
 COMMON_FLAGS	+= $(DEFINES) $(FP_FLAGS)
 COMMON_FLAGS	+= -mthumb -mcpu=cortex-m4
-COMMON_FLAGS	+= -Os -g3
+COMMON_FLAGS	+= -O0 -g3
 COMMON_FLAGS	+= $(INCLUDE_CMD)
 COMMON_FLAGS	+= -fvisibility=hidden
 COMMON_FLAGS	+= -fno-common -ffunction-sections -fdata-sections
+COMMON_FLAGS    += -fsingle-precision-constant
 
 # Warnings
 W_FLAGS      += -Wextra -Wshadow -Wredundant-decls
-W_FLAGS      += -Wall -Wundef
+W_FLAGS      += -Wall -Wundef -Wdouble-promotion -Wfloat-conversion
 
 ###############################################################################
 # C flags
@@ -53,7 +54,9 @@ CFLAGS      += -Wimplicit-function-declaration -Wmissing-prototypes -Wstrict-pro
 CPPFLAGS	+= $(COMMON_FLAGS)
 CPPFLAGS	+= $(W_FLAGS)
 # add this for link-time template instanciation
-CPPFLAGS    += -frepo
+#CPPFLAGS    += -frepo
+CPPFLAGS    += 
+CPPFLAGS    +=  -specs=nano.specs -specs=rdimon.specs
 CPPFLAGS    += -fno-rtti -fno-exceptions -fno-threadsafe-statics
 CPPFLAGS	+= -std=c++11
 CPPFLAGS	+= -MD
@@ -63,7 +66,8 @@ CPPFLAGS	+= -I$(INCLUDE_DIR)
 ###############################################################################
 # Linker flags
 
-LINKERFLAGS += --static -nostartfiles $(COMMON_FLAGS)
+LINKERFLAGS += --static -nostartfiles $(COMMON_FLAGS) -frepo
+LINKERFLAGS +=  -specs=nano.specs -specs=rdimon.specs
 LINKERFLAGS += -Wl,--gc-sections
 LINKERFLAGS += -Wl,-Map=$(TARGET).map
 LINKERFLAGS += -Wl,--start-group

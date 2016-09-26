@@ -59,14 +59,15 @@ DriverInterface* gCurrentInterface;
 struct : public flawless::Listener<MotorCurrent, 0>
 {
 	flawless::ApplicationConfig<MotorCurrent> mMotorCurrentMean{"motorCurrentMean", "f"};
-	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", "f", 0.2f};
-	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", "f", 0.1f};
+	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"maxCurrent", "f", 0.5f};
+	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"currentP", "f", 1.f};
 	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"currentError", "f"};
 	float currentOutputScale {1.f};
 	void callback(flawless::Message<MotorCurrent> const& motorCurrent) override {
 		mMotorCurrentMean = motorCurrent;
-		mCurrentError = mMotorCurrentMean - mMaxCurrent * currentOutputScale;
-		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * (1.f + (mMotorCurrentMean-mMaxCurrent*currentOutputScale) * mCurrentP);
+		const float maxCurrent = mMaxCurrent*currentOutputScale;
+		mCurrentError = mMotorCurrentMean - maxCurrent;
+		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * uint32_t(1.f + (mMotorCurrentMean-maxCurrent) / maxCurrent * mCurrentP);
 		targetAmplitude = std::max(PwmAmplitude+PwmOffTimer, std::min(uint32_t(0xffff), targetAmplitude));
 		TIM_ARR(PWM_TIMER)   = targetAmplitude;
 	}

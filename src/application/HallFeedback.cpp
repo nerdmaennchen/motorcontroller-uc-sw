@@ -135,8 +135,8 @@ struct HallManager {
 			expectedARR = TIM_ARR(HALL_TIMER) = timeout;
 		} else {
 		}
-		mDelaySinceLastTick = 0;
 		publishMessage();
+		mDelaySinceLastTick = 0;
 		mLastHallState = mHallStates;
 	}
 	uint64_t mDelaySinceLastTick {0};
@@ -172,7 +172,7 @@ struct InitHelper : public flawless::Module {
 
 		SystemTime::get().sleep(1000); // 1ms delay to settle the pullups
 
-		hallManager.mLastHallState = hall::readHallState();
+		hallManager.mLastHallState = hallManager.mHallStates = hall::readHallState();
 		hallManager.publishMessage();
 
 		TIM_SR(HALL_TIMER) = 0;

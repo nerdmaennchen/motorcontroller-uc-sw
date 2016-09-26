@@ -1,7 +1,7 @@
 #include <application/PWMLookupTableGenerator.h>
 
 #include <algorithm>
-#include <math.h>
+#include <cmath>
 
 constexpr float pi = 3.14159265359f;
 
@@ -46,7 +46,7 @@ void PWMLookupTableGenerator::generateLookupTableReversed(
 }
 
 static float myModulo(float a, float b) {
-	return fmod(fmod(a+b, b)+b, b);
+	return std::fmod(std::fmod(a+b, b)+b, b);
 }
 
 void PWMLookupTableGeneratorShaped::generateLookupTable(

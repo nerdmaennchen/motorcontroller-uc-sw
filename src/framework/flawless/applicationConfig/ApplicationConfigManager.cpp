@@ -42,16 +42,21 @@ public:
 			while (handle) {
 				if (target == idx) {
 					uint16_t paramLen = handle->getSize();
-					iface->startPacket(mEPNum, paramLen);
-					flawless::LockGuard lock;
-					iface->sendPacket(handle->getValue(), paramLen);
+					if (0 == paramLen) {
+						// special case: if the handle does not have any size its a simple rpc
+						handle->setValue(nullptr);
+					} else {
+						iface->startPacket(mEPNum, paramLen);
+						flawless::LockGuard lock;
+						iface->sendPacket(handle->getValue(), paramLen);
+					}
 					break;
 				}
 				++idx;
 				handle = handle->mNext;
 			}
 		} else {
-			// first two bytes are the index the rest is the content
+			// first byte is the index the rest is the content
 			auto* handle = flawless::util::LinkedList<flawless::ApplicationConfigBase>::get().mFirst;
 			uint8_t idx = 0;
 			uint8_t target = packet[0];

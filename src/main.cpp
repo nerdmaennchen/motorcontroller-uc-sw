@@ -27,7 +27,13 @@ extern "C" {
 
 void* __dso_handle;
 void __cxa_pure_virtual() { while(1); }
-void __cxa__atexit() { while(1); }
+// this function is intended to register functions that need to be called upon unloading of a shared library or upon exit()...
+// we dont need this here -> empty implementation
+int __cxa_atexit(void (*) (void *), void *, void *) {return 0;}
+void __register_exitproc() {}
+void free() { while(1); }
+void malloc() { while(1); }
+
 void atexit() {
 }
 

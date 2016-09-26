@@ -13,7 +13,10 @@ ENTRY(reset_handler)
 /* Define sections. */
 SECTIONS
 {
-		/DISCARD/ : {}
+		/DISCARD/ : {
+			*(.text*dmul*)
+			*(.text*dadd*)
+		}
 		
         . = ORIGIN(rom);
 		.text : {

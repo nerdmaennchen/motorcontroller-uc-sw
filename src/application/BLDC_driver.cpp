@@ -35,8 +35,8 @@ struct BLDC_driver final :
 	flawless::ApplicationConfig<int> mLastKnownPhase                {"bldc_cur_phase", "i", 0};
 
 	flawless::ApplicationConfig<PIDControllerParams> mControllerParams {"bldc_controller", "6f", {0.f,0.f,0.f,
-			2.5e-4, // default P
-			2.e-2,  // default I
+			2.5e-4f, // default P
+			2.e-2f,  // default I
 			2.6e-4f,
 	}};
 
@@ -114,17 +114,18 @@ struct BLDC_driver final :
 			float powerOutput = std::abs(controll);
 			driver->setPower(powerOutput);
 			int targetIndex = mLastKnownPhase;
-			if (controll > 0) {
+			if (controll > 0.f) {
 				targetIndex = mLastKnownPhase + mMaxAdvance;
 			} else {
 				targetIndex = mLastKnownPhase - mMaxAdvance;
 			}
 			targetIndex = myModulo(targetIndex, StepsCount);
 
-			if (avgTickFreq > 0) { // run clockwise
-				driver->runSteps(targetIndex, StepsCount / 6, mTargetStepFrequency, false);
+			uint32_t stepFrequency = uint32_t(std::abs(avgTickFreq)) * 1000 * StepsCount;
+			if (avgTickFreq > 0.f) { // run clockwise
+				driver->runSteps(targetIndex, StepsCount / 6, stepFrequency, false);
 			} else { // run counter clockwise
-				driver->runSteps(3 * StepsCount - targetIndex, StepsCount / 6, mTargetStepFrequency,false);
+				driver->runSteps(3 * StepsCount - targetIndex, StepsCount / 6, stepFrequency,false);
 			}
 		}
 	}
