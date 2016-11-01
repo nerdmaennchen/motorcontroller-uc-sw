@@ -8,7 +8,7 @@ namespace flawless
 {
 
 template<typename T, msgID_t msgID>
-class ListenerManager : public flawless::util::Singleton<ListenerManager<T, msgID>>, public ListenerManagerBase {
+class ListenerManager final : public flawless::util::Singleton<ListenerManager<T, msgID>>, public ListenerManagerBase {
 public:
 	void invoke(MessageContainerBase* msg) override {
 		Listener<T, msgID>* listener = flawless::util::LinkedList<Listener<T, msgID>>::get().mFirst;
