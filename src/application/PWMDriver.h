@@ -7,7 +7,7 @@ namespace pwmdriver
 {
 
 // off time is before the PWM and after to there is always a PWM_OFF_TIME*2 off time between two consecutive PWM pulses
-constexpr uint32_t PwmOffTimer      = 128;
+constexpr uint32_t PwmOffTimer      = 0;
 constexpr uint32_t PwmAmplitude     = 512;
 
 constexpr uint32_t StepsCount   = 600;

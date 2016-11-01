@@ -67,7 +67,7 @@ struct : public flawless::Listener<MotorCurrent, 0>
 		mMotorCurrentMean = motorCurrent;
 		const float maxCurrent = mMaxCurrent*currentOutputScale;
 		mCurrentError = mMotorCurrentMean - maxCurrent;
-		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * uint32_t(1.f + (mMotorCurrentMean-maxCurrent) / maxCurrent * mCurrentP);
+		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * uint32_t(std::max(0.f, 1.f + (mMotorCurrentMean-maxCurrent) / maxCurrent * mCurrentP));
 		targetAmplitude = std::max(PwmAmplitude+PwmOffTimer, std::min(uint32_t(0xffff), targetAmplitude));
 		TIM_ARR(PWM_TIMER)   = targetAmplitude;
 	}

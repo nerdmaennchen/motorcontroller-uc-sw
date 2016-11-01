@@ -94,7 +94,6 @@ struct BLDC_driver final :
 		}
 	}
 
-	float mCOverride {1.f};
 	void callback(flawless::Message<hall::Feedback> const& hallFeedback) {
 		flawless::LockGuard lock;
 		mLastHallFeedback = hallFeedback;
