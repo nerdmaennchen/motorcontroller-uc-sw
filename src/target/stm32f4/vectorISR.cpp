@@ -18,6 +18,9 @@
  * along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <libopencm3/cm3/common.h>
+#include <libopencm3/stm32/f4/syscfg.h>
+
 extern "C"
 {
 
@@ -225,6 +228,8 @@ void (*const vector_table[]) (void) = {
 void reset_handler(void)
 {
 	if (_ramBegin == 0xdeadbeef) {
+		_ramBegin = 0;
+		SYSCFG_CMPCR = (SYSCFG_CMPCR & ~0x3) | 1;
 		__asm__ volatile("LDR R0, =0x1FFF0000\n"
                 "LDR SP,[R0, #0]\n"
                 "LDR R0,[R0, #4]\n"

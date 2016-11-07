@@ -4,27 +4,19 @@
 #include "flawless/platform/system.h"
 
 #include <flawless/util/Array.h>
+#include <flawless/util/FiFo.h>
 #include "interfaces/ISRTime.h"
 
 namespace flawless
 {
 
 namespace {
-	Array<Post, MSG_PUMP_MSG_QUEUE_MAX_SIZE> gMsgQueue;
-	volatile size_t gMsgQueueHead = 0;
-	volatile size_t gMsgQueueSize = 0;
+	FIFO<Post, MSG_PUMP_MSG_QUEUE_MAX_SIZE, LockGuard> gMsgQueue;
 }
 
 bool MessagePump::dispatch(Post post)
 {
-	flawless::LockGuard lock;
-	if (gMsgQueueSize < MSG_PUMP_MSG_QUEUE_MAX_SIZE) {
-		size_t nextIdx = (gMsgQueueHead + gMsgQueueSize) % MSG_PUMP_MSG_QUEUE_MAX_SIZE;
-		gMsgQueue[nextIdx] = post;
-		++gMsgQueueSize;
-		return true;
-	}
-	return false;
+	return gMsgQueue.put(post);
 }
 
 
@@ -32,18 +24,11 @@ void MessagePump::run()
 {
 	while (true)
 	{
-		if (gMsgQueueSize) {
+		if (gMsgQueue.count()) {
 			WorkingTime workingTime;
-			Post& head = gMsgQueue[gMsgQueueHead];
+			Post& head = gMsgQueue[0];
 			head.invoke();
-			{
-				flawless::LockGuard lock;
-				++gMsgQueueHead;
-				if (gMsgQueueHead >= MSG_PUMP_MSG_QUEUE_MAX_SIZE) {
-					gMsgQueueHead = 0;
-				}
-				--gMsgQueueSize;
-			}
+			gMsgQueue.pop(1);
 		}
 	}
 }
