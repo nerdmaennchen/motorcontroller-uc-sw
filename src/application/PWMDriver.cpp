@@ -62,14 +62,14 @@ struct : public flawless::Listener<MotorCurrent, 0>
 	flawless::ApplicationConfig<MotorCurrent> mMaxCurrent{"max_motor_current", "f", 0.5f};
 	flawless::ApplicationConfig<MotorCurrent> mCurrentP{"motor_current_controll_p", "f", 1.f};
 	flawless::ApplicationConfig<MotorCurrent> mCurrentError{"motor_current_error", "f"};
-	float currentOutputScale {1.f};
+	flawless::ApplicationConfig<MotorCurrent> currentOutputScale{"motor_current_output_scale", "f", 1.f};
 	void callback(flawless::Message<MotorCurrent> const& motorCurrent) override {
 		mMotorCurrentMean = motorCurrent;
 		const float maxCurrent = mMaxCurrent*currentOutputScale;
 		mCurrentError = mMotorCurrentMean - maxCurrent;
 		uint32_t targetAmplitude = TIM_ARR(PWM_TIMER) * uint32_t(std::max(0.f, 1.f + (mMotorCurrentMean-maxCurrent) / maxCurrent * mCurrentP));
 		targetAmplitude = std::max(PwmAmplitude+PwmOffTimer, std::min(uint32_t(0xffff), targetAmplitude));
-		TIM_ARR(PWM_TIMER)   = targetAmplitude;
+		TIM_ARR(PWM_TIMER) = targetAmplitude;
 	}
 } currentController;
 
@@ -121,6 +121,16 @@ void Driver::set_mHZ(uint32_t mHZ) {
 	}
 }
 
+namespace {
+struct : public flawless::Callback<uint32_t&, bool> {
+	void callback(uint32_t& step, bool set) override {
+		if (not set) {
+			step = pwmdriver::Driver::get().getCurStep();
+		}
+	}
+	flawless::ApplicationConfig<uint32_t> gCurStepConfig{"motor_cur_step", "I", this};
+} curStepHelper;
+}
 // get the index of the last performed step
 uint32_t Driver::getCurStep() {
 	Array<uint16_t, TicksPerStep> const* curPtr = (Array<uint16_t, TicksPerStep> const*)DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM);
