@@ -31,7 +31,7 @@ namespace
 static const char *usb_strings[] = {
 	"FU Berlin",
 	"BLDC-Controller",
-	"0.8"
+	"0.9"
 };
 
 usbd_device *g_usbd_dev;
