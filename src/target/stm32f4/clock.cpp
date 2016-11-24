@@ -34,8 +34,8 @@ void clock_init(void)
 	/* set main PLL to 168 to have VCO=336MHz resulting frequency */
 	RCC_PLLCFGR = (RCC_PLLCFGR & ~(0x1ff << RCC_PLLCFGR_PLLN_SHIFT)) | (168 << RCC_PLLCFGR_PLLN_SHIFT);
 
-	/* set division factor to 2 at PLL Output */
-	RCC_PLLCFGR = (RCC_PLLCFGR & ~(0x3 << RCC_PLLCFGR_PLLP_SHIFT)) | (0 << RCC_PLLCFGR_PLLP_SHIFT);
+	/* set division factor to 4 at PLL Output */
+	RCC_PLLCFGR = (RCC_PLLCFGR & ~(0x3 << RCC_PLLCFGR_PLLP_SHIFT)) | (1 << RCC_PLLCFGR_PLLP_SHIFT);
 
 	/* set division factor to 7 for 48MHz at USB_OTG, SDIo and RNG */
 	RCC_PLLCFGR = (RCC_PLLCFGR & ~(0x0f << RCC_PLLCFGR_PLLQ_SHIFT)) | (7 << RCC_PLLCFGR_PLLQ_SHIFT);
@@ -49,8 +49,8 @@ void clock_init(void)
 
 	/* setup clocks for internal busses */
 	RCC_CFGR = (RCC_CFGR & ~(0x0f << RCC_CFGR_HPRE_SHIFT))  | (0 << RCC_CFGR_HPRE_SHIFT);
-	RCC_CFGR = (RCC_CFGR & ~(0x07 << RCC_CFGR_PPRE1_SHIFT)) | (5 << RCC_CFGR_PPRE1_SHIFT);
-	RCC_CFGR = (RCC_CFGR & ~(0x07 << RCC_CFGR_PPRE2_SHIFT)) | (4 << RCC_CFGR_PPRE2_SHIFT);
+	RCC_CFGR = (RCC_CFGR & ~(0x07 << RCC_CFGR_PPRE1_SHIFT)) | (4 << RCC_CFGR_PPRE1_SHIFT);
+	RCC_CFGR = (RCC_CFGR & ~(0x07 << RCC_CFGR_PPRE2_SHIFT)) | (0 << RCC_CFGR_PPRE2_SHIFT);
 
 	/* set flash for 2 waitstates */
 	FLASH_ACR = (FLASH_ACR & ~(0x7)) | 5;
