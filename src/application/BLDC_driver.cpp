@@ -1,6 +1,7 @@
 #include "PWMDriver.h"
 #include "PWMLookupTableGenerator.h"
 #include "HallFeedback.h"
+#include "CurrentController.h"
 
 #include "controller/PIDController.h"
 
@@ -27,12 +28,12 @@ struct BLDC_driver final :
 		public flawless::Callback<int&, bool>,
 		public pwmdriver::DriverInterface,
 		public flawless::Listener<hall::Feedback, 0> {
-	flawless::ApplicationConfig<bool> mEnableBLDC                   {"bldc_enable", "B", this, false};
-	flawless::ApplicationConfig<Array<uint16_t, 8>> mHallIndexes    {"bldc_hall_mappings", "8H"};
-	flawless::ApplicationConfig<int> mTarget_frequency_mHz          {"bldc_target_frequency", "i", this, 0};
-	flawless::ApplicationConfig<int> mMaxAdvance                    {"bldc_advance", "i", -150};
-	flawless::ApplicationConfig<float> mShapeFactor                 {"bldc_shape_factor", "f", this, 1.25f};
-	flawless::ApplicationConfig<int> mLastKnownPhase                {"bldc_cur_phase", "i", 0};
+	flawless::ApplicationConfig<bool> mEnableBLDC                   {"bldc.enable", "B", this, false};
+	flawless::ApplicationConfig<Array<uint16_t, 8>> mHallIndexes    {"bldc.hall_mappings", "8H"};
+	flawless::ApplicationConfig<int> mTarget_frequency_mHz          {"bldc.target_frequency", "i", this, 0};
+	flawless::ApplicationConfig<int> mMaxAdvance                    {"bldc.advance", "i", -150};
+	flawless::ApplicationConfig<float> mShapeFactor                 {"bldc.shape_factor", "f", this, 0.f};
+	flawless::ApplicationConfig<int> mLastKnownPhase                {"bldc.cur_phase", "i", 0};
 
 	flawless::ApplicationConfig<PIDControllerParams> mControllerParams {"bldc_controller", "6f", {0.f,0.f,0.f,
 			2.5e-4f, // default P
@@ -42,13 +43,12 @@ struct BLDC_driver final :
 
 	PIDController mController{&(mControllerParams.get())};
 
-	flawless::Message<hall::Feedback> mLastHallFeedback;
-
 	float mTargetTickFrequency {0};
 	uint32_t mTargetStepFrequency {0};
 
 	uint32_t StepsCount {0};
 	pwmdriver::Driver* driver {nullptr};
+	CurrentController& currentController {CurrentController::get()};
 	BLDC_driver(unsigned int level) : flawless::Module(level) {}
 
 	SystemTime& time = SystemTime::get();
@@ -63,18 +63,24 @@ struct BLDC_driver final :
 			if (enable) {
 				driver->claim(this);
 				callback(mTarget_frequency_mHz, true);
+				pwmdriver::CommutationPattern *commPattern = driver->getPattern();
 
 				// setup the pwm configs
 				PWMLookupTableGeneratorShaped lookupGenerator;
-				lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, driver->getPattern() + StepsCount * 0);
-				lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, driver->getPattern() + StepsCount * 1);
-				lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, driver->getPattern() + StepsCount * 2);
-				lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, driver->getPattern() + StepsCount * 3);
+				lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, commPattern + StepsCount * 0);
+				lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, commPattern + StepsCount * 1);
+				lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, commPattern + StepsCount * 2);
+				lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, commPattern + StepsCount * 3);
+
+				// the last element contains information about when to sample the hall sensors
+				for (uint32_t i = 0; i < pwmdriver::StepsCount; ++i) {
+					commPattern[i*pwmdriver::TicksPerStep][pwmdriver::TicksPerStep-1] = 0;
+				}
 
 				mControllerParams->errorP = 0;
 				mControllerParams->errorI = 0;
 			} else {
-				driver->setPower(0.f);
+				driver->claim(nullptr);
 			}
 		}
 	}
@@ -96,11 +102,10 @@ struct BLDC_driver final :
 
 	void callback(flawless::Message<hall::Feedback> const& hallFeedback) {
 		flawless::LockGuard lock;
-		mLastHallFeedback = hallFeedback;
 
-		mLastKnownPhase = mHallIndexes.get()[mLastHallFeedback->currentHallValues];
+		mLastKnownPhase = mHallIndexes.get()[hallFeedback->currentHallValues];
 		if (mEnableBLDC) {
-			float avgTickFreq = mLastHallFeedback->tickFreq_Hz;
+			const float avgTickFreq = hallFeedback->tickFreq_Hz;
 			systemTime_t now = time.getSystemTimeUS();
 			float dT = (now - mLastUpdateTime) / 1e6f;
 			float e  = (mTargetTickFrequency - avgTickFreq);
@@ -111,7 +116,7 @@ struct BLDC_driver final :
 			mLastUpdateTime = now;
 
 			float powerOutput = std::abs(controll);
-			driver->setPower(powerOutput);
+			currentController.setPower(powerOutput);
 			int targetIndex = mLastKnownPhase;
 			if (controll > 0.f) {
 				targetIndex = mLastKnownPhase + mMaxAdvance;

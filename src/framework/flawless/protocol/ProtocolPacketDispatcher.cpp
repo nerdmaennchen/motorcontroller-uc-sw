@@ -11,7 +11,7 @@
 
 namespace {
 
-flawless::MessageBufferMemory<flawless::Packet_, 4> packetMessageBuffer;
+flawless::MessageBufferMemory<flawless::Packet_, 10> packetMessageBuffer;
 
 class : public flawless::Listener<flawless::Packet_, MSG_ID_INCOMMING_PACKET> {
 	void callback(flawless::Packet const& packet) override {

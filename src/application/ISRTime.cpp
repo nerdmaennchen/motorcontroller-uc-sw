@@ -27,7 +27,7 @@ struct : flawless::Callback<Array<systemTime_t, 3>&, bool>{
 			mLastTimes[2] = WorkingTime::timeSpentBusy;
 		}
 	}
-	flawless::ApplicationConfig<Array<systemTime_t, 3>> times{"system_load", "3Q", this};
+	flawless::ApplicationConfig<Array<systemTime_t, 3>> times{"system.load", "3Q", this};
 } isrTimeHelper;
 }
 

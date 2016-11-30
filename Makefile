@@ -155,7 +155,7 @@ $(TARGET).bin: $(TARGET).elf
 	@ $(OBJ_CPY) -O binary $< $@
 
 usb-flash: $(TARGET).bin
-	@ python usbctl.py set enter_bootloader
+	@ python usbctl.py set system.enter_bootloader
 	@ sleep 1
 	@ dfu-util -s 0x08000000 -i 0 -c 1 -D $< -a 0 -R
 

@@ -15,58 +15,68 @@
 #include <libopencm3/stm32/f4/gpio.h>
 #include <libopencm3/stm32/f4/rcc.h>
 
-#define LED_PORT GPIOC
-#define LED_PIN GPIO13
+#define LED_PORT GPIOA
+#define LED_PIN GPIO15
 
 namespace
 {
-flawless::MessageBufferMemory<int, 5> intMsgBuf;
-flawless::MessageBufferMemory<int, 1> intMsgBuf2;
+struct BlinkInstruction {
+	flawless::timerInterval_t delay;
+	bool ledState;
+};
 
-class TestModule : public flawless::Module
+Array<BlinkInstruction, 4> heartBeatSequence {{
+	{600000, true},
+	{70000, false},
+	{100000, true},
+	{50000, false}
+}};
+
+flawless::MessageBufferMemory<int, 5> intMsgBuf2;
+
+class TestModule : public flawless::Module, public flawless::Listener<int, 1>, public flawless::TimerCallback
 {
-	class : public flawless::Listener<int, 1> {
-		void callback(flawless::Message<int> const&) override {
-			gpio_set(LED_PORT, LED_PIN);
+	flawless::Message<int> mLastMsg;
+
+	void callback() override {
+		auto msg = flawless::getFreeMessage<int>();
+		if (msg) {
+			msg = mLastMsg + 1;
+			if (msg == int(heartBeatSequence.size())) {
+				msg = 0;
+			}
+			msg.post<1>();
+		} else {
+			msg = 0;
 		}
-	} mListener1;
-	class : public flawless::Listener<int, 2> {
-		void callback(flawless::Message<int> const&) override {
+	}
+
+	void callback(flawless::Message<int> const& msg) override {
+		mLastMsg = msg;
+
+		if (heartBeatSequence[int(mLastMsg)].ledState) {
+			gpio_set(LED_PORT, LED_PIN);
+		} else {
 			gpio_clear(LED_PORT, LED_PIN);
 		}
-	} mListener2;
-
-	class : public flawless::TimerCallback {
-		class : public flawless::TimerCallback {
-			void callback() override {
-				auto msg = flawless::MessageBufferManager<int>::get().getFreeMessage();
-				if (msg) {
-					msg.post<2>();
-				}
-			}
-		} mOffTimer;
-
-		void callback() override {
-			auto msg = flawless::MessageBufferManager<int>::get().getFreeMessage();
-			if (msg) {
-				msg.post<1>();
-				mOffTimer.start(500000, false);
-			}
-		}
-	} mOnTimer;
-
-	flawless::Message<int> mLastMsg;
+		this->start(heartBeatSequence[int(mLastMsg)].delay, false);
+	}
 
 public:
 	TestModule(unsigned int level) : flawless::Module(level) {}
 	virtual ~TestModule() {};
 
 	void init(unsigned int) override {
-		mOnTimer.start(1000000, true);
-
-		RCC_AHB1ENR |= RCC_AHB1ENR_IOPCEN;
+		RCC_AHB1ENR |= RCC_AHB1ENR_IOPAEN;
 		gpio_mode_setup(LED_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED_PIN);
 		gpio_set_output_options(LED_PORT, GPIO_OTYPE_OD, GPIO_OSPEED_100MHZ, LED_PIN);
+		gpio_set(LED_PORT, LED_PIN);
+
+		auto msg = flawless::getFreeMessage<int>();
+		if (msg) {
+			msg = 0;
+			msg.post<1>();
+		}
 	}
 };
 

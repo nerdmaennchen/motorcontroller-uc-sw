@@ -63,13 +63,12 @@ struct USBComModule : public flawless::Module, public flawless::PhyInterface, pu
 
 	void callback(usbd_device *usbd_dev, uint8_t ep) override {
 		if (ep == COM_USB_OUT_ENDPOINT_NO) {
-			flawless::Packet packet = flawless::MessageBufferManager<flawless::Packet_>::get().getFreeMessage();
+			auto packet = flawless::getFreeMessage<flawless::Packet_>();
 			if (packet) {
 				packet->len = usbd_ep_read_packet(usbd_dev, ep, packet->buffer.data(), MAX_PACKET_SIZE);
 				packet->iface = this;
 				packet.post<MSG_ID_INCOMMING_PACKET>();
 			} else {
-				flawless::MessageBufferManager<flawless::Packet_>::get().getFreeMessage();
 				// discard this message
 				uint8_t dummyBuffer[MAX_PACKET_SIZE];
 				usbd_ep_read_packet(usbd_dev, ep, dummyBuffer, MAX_PACKET_SIZE);

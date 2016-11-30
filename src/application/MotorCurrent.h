@@ -2,12 +2,15 @@
 
 #include <flawless/stdtypes.h>
 #include <flawless/util/Array.h>
+#include <interfaces/systemTime.h>
 
-#define SMOOTHING_CNT (32)
+using Voltage = float;
 
-struct MotorCurrentMeasure {
-	// current in uA
-	Array<float, SMOOTHING_CNT> vals;
+struct VoltageMeasure {
+	Voltage motorCurrent;
+	Voltage voltage_phase_U;
+	Voltage voltage_phase_V;
+	Voltage voltage_phase_W;
+	Voltage voltage_VPP;
 };
 
-using MotorCurrent = float;

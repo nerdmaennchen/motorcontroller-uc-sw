@@ -1,4 +1,4 @@
-from usbtest import *
+from usbctl import *
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -12,7 +12,7 @@ def data_gen():
 			vals = vals + getConfig(dev, configs, target)
 		yield vals
 	
-numdata = 40
+numdata = 50
 xdata = list(range(0, numdata))
 def run(data):
 	# update the data
@@ -27,8 +27,8 @@ def run(data):
 	mi = float('inf')
 	ma = float('-inf')
 	for d in datas:
-		mi = min(mi, min(d))
-		ma = max(ma, max(d))
+		mi = min(mi, min(d)) - .1
+		ma = max(ma, max(d)) + .1
 	yMin, yMax = ax.get_ylim()
 	if (yMin, yMax) != (mi, ma):
 		ax.set_ylim(mi, ma)

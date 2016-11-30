@@ -41,7 +41,6 @@ void clock_init(void)
 	RCC_PLLCFGR = (RCC_PLLCFGR & ~(0x0f << RCC_PLLCFGR_PLLQ_SHIFT)) | (7 << RCC_PLLCFGR_PLLQ_SHIFT);
 
 
-
 	/* enable PLL */
 	RCC_CR |= RCC_CR_PLLON;
 	/* wait for PLL to become ready */
@@ -53,10 +52,10 @@ void clock_init(void)
 	RCC_CFGR = (RCC_CFGR & ~(0x07 << RCC_CFGR_PPRE2_SHIFT)) | (0 << RCC_CFGR_PPRE2_SHIFT);
 
 	/* set flash for 2 waitstates */
-	FLASH_ACR = (FLASH_ACR & ~(0x7)) | 5;
-	while ((FLASH_ACR & 0x7) != 5);
+	FLASH_ACR = (FLASH_ACR & ~(0x7)) | 2;
+	while ((FLASH_ACR & 0x7) != 2);
 
-	FLASH_ACR |= FLASH_PRFTEN;// | FLASH_DCE | FLASH_ICE;
+	FLASH_ACR |= FLASH_PRFTEN | FLASH_DCE | FLASH_ICE;
 
 	/* switch to PLL as systen clock source */
 	RCC_CFGR = (RCC_CFGR & ~3) | RCC_CFGR_SWS_PLL;

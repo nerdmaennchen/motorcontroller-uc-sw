@@ -16,7 +16,7 @@ typedef uint32_t gpioPort_t;
 
 typedef uint32_t gpioPin_t;
 
-#define GPIO_MAX_PIN 16U
+#define GPIO_MAX_PIN 16
 
 typedef enum
 {

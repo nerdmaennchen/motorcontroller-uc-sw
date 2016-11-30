@@ -13,11 +13,11 @@ void PWMLookupTableGenerator::generateLookupTable(
 	const float scaleFactor = pi * 2.f / float(numSteps);
 	for (size_t sIdx = 0; sIdx < numSteps; ++sIdx) {
 		float phase0 = (float)sIdx * scaleFactor;
-		for (size_t i = 0; i < pwmdriver::TicksPerStep; ++i) {
+		for (size_t i = 0; i < stepsPerPhase; ++i) {
 			float phase = phase0 + phaseOffset * i;
-			float s = std::sin(phase);
+			float s = std::cos(phase);
 			s = s * .5f + .5f;
-			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmOffTimer / 2;
+			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmPreOffTimer / 2;
 			const uint16_t sVal = uint32_t(roundf(intermediate));
 			(*pattern)[i] = sVal;
 		}
@@ -33,11 +33,11 @@ void PWMLookupTableGenerator::generateLookupTableReversed(
 	const float scaleFactor = -pi * 2.f / float(numSteps);
 	for (size_t sIdx = 0; sIdx < numSteps; ++sIdx) {
 		float phase0 = (float)sIdx * scaleFactor;
-		for (size_t i = 0; i < pwmdriver::TicksPerStep; ++i) {
+		for (size_t i = 0; i < stepsPerPhase; ++i) {
 			float phase = phase0 + phaseOffset * i;
-			float s = std::sin(phase);
+			float s = std::cos(phase);
 			s = s * .5f + .5f;
-			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmOffTimer / 2;
+			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmPreOffTimer / 2;
 			const uint16_t sVal = uint32_t(roundf(intermediate));
 			(*pattern)[i] = sVal;
 		}
@@ -60,11 +60,11 @@ void PWMLookupTableGeneratorShaped::generateLookupTable(
 		float phase0 = (float)sIdx * scaleFactor;
 		for (size_t i = 0; i < pwmdriver::TicksPerStep; ++i) {
 			float phase = phase0 + phaseOffset * i;
-			float s = std::sin(phase);
+			float s = std::cos(phase);
 			phase = phase + ((myModulo(phase, .5f*pi) - .25f*pi) * s*s)*shapeFactor;
-			s = std::max(-std::abs(s), std::min(std::abs(s), std::sin(phase)));
+			s = std::max(-std::abs(s), std::min(std::abs(s), std::cos(phase)));
 			s = s * .5f + .5f;
-			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmOffTimer / 2;
+			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmPreOffTimer / 2;
 			const uint16_t sVal = uint32_t(roundf(intermediate));
 			(*pattern)[i] = sVal;
 		}
@@ -83,11 +83,11 @@ void PWMLookupTableGeneratorShaped::generateLookupTableReversed(
 		float phase0 = (float)sIdx * scaleFactor;
 		for (size_t i = 0; i < pwmdriver::TicksPerStep; ++i) {
 			float phase = phase0 + phaseOffset * i;
-			float s = std::sin(phase);
+			float s = std::cos(phase);
 			phase = phase + ((myModulo(phase, .5f*pi) - .25f*pi) * s*s)*shapeFactor;
-			s = std::max(-std::abs(s), std::min(std::abs(s), std::sin(phase)));
+			s = std::max(-std::abs(s), std::min(std::abs(s), std::cos(phase)));
 			s = s * .5f + .5f;
-			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmOffTimer / 2;
+			const float intermediate = s * pwmdriver::PwmAmplitude + pwmdriver::PwmPreOffTimer / 2;
 			const uint16_t sVal = uint32_t(roundf(intermediate));
 			(*pattern)[i] = sVal;
 		}

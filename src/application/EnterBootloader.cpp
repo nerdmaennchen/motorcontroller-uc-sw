@@ -15,7 +15,17 @@ public:
 		system_reset();
 	}
 private:
-flawless::ApplicationConfig<void> enableConfig{"reset", this};
-} enableCallback;
+flawless::ApplicationConfig<void> enableConfig{"system.enter_bootloader", this};
+} enableCallbackBL;
+
+class : flawless::Callback<void> {
+public:
+	void callback() override {
+		_ramBegin = 0;
+		system_reset();
+	}
+private:
+flawless::ApplicationConfig<void> enableConfig{"system.reset", this};
+} enableCallbackReset;
 
 }

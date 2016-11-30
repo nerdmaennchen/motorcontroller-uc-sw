@@ -6,9 +6,15 @@
 namespace pwmdriver
 {
 
+#define PWM_TIMER TIM1
+
 // off time is before the PWM and after to there is always a PWM_OFF_TIME*2 off time between two consecutive PWM pulses
-constexpr uint32_t PwmOffTimer      = 0;
-constexpr uint32_t PwmAmplitude     = 512;
+constexpr uint32_t PwmPreOffTimer       = 16; // has to be something more than zero to enable a timeframe to fetch hall data via DMA
+constexpr uint32_t PwmAmplitude         = 512;
+constexpr uint32_t PwmPostOffTimer      = 16;
+
+constexpr uint32_t PwmCentralDutyMoment = PwmPreOffTimer + PwmAmplitude / 2;
+constexpr uint32_t PwmMinCyclePeriod    = PwmPreOffTimer + PwmAmplitude + PwmPostOffTimer;
 
 constexpr uint32_t StepsCount   = 600;
 constexpr uint32_t TicksPerStep = 4;
@@ -37,10 +43,6 @@ class Driver : public flawless::util::Singleton<pwmdriver::Driver> {
 		void setEnabled(bool enabled);
 
 		void claim(DriverInterface* interface);
-
-		// set a power scaling factor (between 0 and 1)
-		void setPower(float power);
-		float getPower();
 };
 
 }

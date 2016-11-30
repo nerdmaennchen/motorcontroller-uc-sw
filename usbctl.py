@@ -119,7 +119,8 @@ if __name__ == "__main__":
 	
 	configs = fetchConfig(dev)
 	if len(sys.argv) == 1:
-		print(configs)
+		for k, v in sorted(configs.items()):
+			print("{:0>3d}: {:s}: {:s}, {:d}".format(v[0], k, v[2], v[1]))
 		exit(0)
 		
 #format: [progname] set target [formatstr (params)*]
