@@ -65,7 +65,7 @@ enum class MovingDirection {
 	CCW
 };
 
-constexpr uint32_t DebounceSize = 1;
+constexpr uint32_t DebounceSize = 8;
 using DebounceBuffer = Array<int, DebounceSize>;
 
 namespace {
@@ -135,15 +135,15 @@ struct HallManager : public flawless::Module {
 		if (DMA_SCCR(HALL_DMA, HALL_DMA_STREAM) & DMA_CR_CT) {
 			buffer = &(mRawMeasureBuffer1.get());
 		}
-		int state = (*buffer)[0] & 0x7;
+		int state = (*buffer)[DebounceSize-1] & 0x7;
 		if (state == mHallStates) {
 			return;
 		}
-		for (uint32_t i = 1; i < buffer->size(); ++i) {
-			if (state != ((*buffer)[i] & 0x7)) {
-				return;
-			}
-		}
+//		for (uint32_t i = 1; i < buffer->size(); ++i) {
+//			if (state != ((*buffer)[i] & 0x7)) {
+//				return;
+//			}
+//		}
 
 		flawless::LockGuard lock;
 		notifyHallTick(state);

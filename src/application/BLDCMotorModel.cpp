@@ -51,36 +51,21 @@ struct BLDCMotorModel :
 	SiLi::Matrix<2, 1> mState            {{0.f, 0.f}};                // x vector
 	SiLi::Matrix<2, 2> mCertainty        {{1.f, 0.f, 0.f, 1.f}};      // P matrix
 
-	SiLi::Matrix<2, 2> mPredictQ         {{1.e5f, 0.f, 0.f, 1.e3f}};  // Q matrix
-	SiLi::Matrix<2, 2> mCorrectR         {{0.f, 0.f, 0.f, 1.e1f}};    // R matrix
+	SiLi::Matrix<2, 2> mPredictQ         {{1.e1f, 0.f, 0.f, 5.e2f}};  // Q matrix
+	SiLi::Matrix<2, 2> mCorrectR         {{0.f, 0.f, 0.f, 5.e0f}};    // R matrix
 	static constexpr float mCorrectRegularisation         {1e-6f};
+
+	static constexpr float mCovClipping {1.e4f};
 
 	pwmdriver::Driver* driver {nullptr};
 
 	void predict(float dT) {
-//		int step = driver->getCurStep();
-//		float commuteSpeed = float(driver->getCurTickSpeed()) / float(StepsCount / 6) / 1000.f;
-//		if (step >= TotalTickCnt / 2) {
-//			commuteSpeed = -commuteSpeed;
-//		}
-//		float speedDiff = (commuteSpeed - mState(1, 0)) * mMotorDrag * dT;
-
 		float speedDiff = (mState(1, 0) * mMotorDrag) * dT;
 		if (mState(1, 0) >= 0) {
 			speedDiff = -std::min(mState(1, 0), speedDiff);
 		} else {
 			speedDiff = -std::max(mState(1, 0), speedDiff);
 		}
-
-//		int curStep = driver->getCurStep();
-//		if (curStep > 2 * StepsCount) {
-//			curStep = (4 * StepsCount) - curStep;
-//		}
-//		curStep = myModulo(curStep, StepsCount);
-//		float phaseAngle = (float(curStep) / (StepsCount) - mState(0, 0) / 6) * 2 * pi;
-//		phaseAngle = std::sin(phaseAngle);
-//		const float u = phaseAngle * mMotorTorqueConstant * mLastCurrentMeasurement / mMotorInertia;
-		const float u = 0.f;
 
 		const SiLi::Matrix<2, 2> F({
 			1.f, dT,
@@ -90,25 +75,15 @@ struct BLDCMotorModel :
 			.5f * dT,
 			1.f
 		});
-		const SiLi::Matrix<2, 1> Bu({
-			.5f * dT * dT,
-			dT
-		});
-		mState = F * mState + BComSpeed * speedDiff + Bu * u;
+		mState = F * mState + BComSpeed * speedDiff;
 
-		float helperS = mState(0, 0) - mNextPhaseLowerLimit;
-		float helperU = mNextPhaseUpperLimit - mNextPhaseLowerLimit;
-		float helperSM = myModulo(helperS, 6.f);
-		float helperUM = myModulo(helperU, 6.f);
-		helperS = std::max(0.f, std::min(helperU, helperSM)) + mNextPhaseLowerLimit;
-
-		mState(0, 0) = myModulo(helperS, 6.f);
+		mState(0, 0) = myModulo(mState(0, 0), 6.f);
 
 		mCertainty = F * mCertainty * F.t() + mPredictQ * dT;
 		for (int row(0); row < 2; ++row) {
 			for (int col(0); col < 2; ++col) {
-				if (mCertainty(row, col) > 1.e5f) {
-					mCertainty(row, col) = 1.e5;
+				if (mCertainty(row, col) > mCovClipping) {
+					mCertainty(row, col) = mCovClipping;
 				}
 			}
 		}
@@ -133,8 +108,8 @@ struct BLDCMotorModel :
 		mCertainty = mCertainty - K * S * K.t();
 		for (int row(0); row < 2; ++row) {
 			for (int col(0); col < 2; ++col) {
-				if (mCertainty(row, col) > 1.e5f) {
-					mCertainty(row, col) = 1.e5;
+				if (mCertainty(row, col) > mCovClipping) {
+					mCertainty(row, col) = mCovClipping;
 				}
 			}
 		}
@@ -190,7 +165,17 @@ struct BLDCMotorModel :
 		return (b + a % b) % b;
 	}
 	float myModulo(float a, float b) {
-		return fmodf(b + fmodf(a, b), b);
+		if (a < 0) {
+			while (a < 0) {
+				a += b;
+			}
+			return a;
+		} else {
+			while (a > 0) {
+				a -= b;
+			}
+			return a;
+		}
 	}
 
 	void init(unsigned int) {
@@ -198,7 +183,7 @@ struct BLDCMotorModel :
 		// setup the lookup tables
 		int step = 4; // at phase 0 we read a hall feedback of 4
 		for (int i=0; i < 6; ++i) {
-			float idx = i + .5;
+			float idx = i;
 			mHallIndexes[step]  = myModulo(idx, 6.f);
 			step = hall::getNextStep(step, true);
 		}

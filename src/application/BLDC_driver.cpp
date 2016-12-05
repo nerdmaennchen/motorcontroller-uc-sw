@@ -38,15 +38,15 @@ struct BLDC_driver final :
 	    	0.f
 			,0.f,
 			0.f,
-			2.5e-4f, // default P
-			2.e-2f,  // default I
+			1.e-2f, // default P
+			2.e-3f,  // default I
 			2.6e-4f, // default D
 			0.f, 0.f, 0.f
 	};
 
 
 	float mOutput2Advance                {1e-2f};
-	int   mMaxAdvance                    {150};
+	int   mMaxAdvance                    {190};
 	float mMinControlOutput              {0.f};
 	float mTargetTickFrequency           {0.f};
 	uint32_t mTargetStepFrequency        {0};

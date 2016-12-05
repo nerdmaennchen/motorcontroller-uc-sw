@@ -29,14 +29,14 @@ struct : public flawless::Listener<VoltageMeasure, 0>
 {
 	flawless::ApplicationConfig<Voltage> mMotorCurrentMean{"current_ctl.current", "f"};
 	flawless::ApplicationConfig<Voltage> mMaxCurrent{"current_ctl.max_current", "f", 0.5f};
-	flawless::ApplicationConfig<Voltage> mCurrentP{"current_ctl.controll_p", "f", 1.5f};
+	flawless::ApplicationConfig<Voltage> mCurrentP{"current_ctl.controll_p", "f", .05f};
 	flawless::ApplicationConfig<Voltage> mCurrentError{"current_ctl.error", "f"};
 	flawless::ApplicationConfig<Voltage> currentOutputScale{"current_ctl.output_scale", "f", 1.f};
 
 	flawless::ApplicationConfig<Voltage> v_gain{"current_ctl.v_gain", "f", 10.f};
 	flawless::ApplicationConfig<Voltage> v_ref{"current_ctl.v_ref", "f", 3.3f / 2.f};
 
-	flawless::ApplicationConfig<int> max_arr{"current_ctl.max_arr", "I", 0xffff};
+	flawless::ApplicationConfig<int> max_arr{"current_ctl.max_arr", "I", 0x1fff};
 
 	int measurementCouter {0};
 	bool calibrating      {false};

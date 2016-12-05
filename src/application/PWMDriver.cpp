@@ -120,7 +120,7 @@ uint32_t Driver::getCurStep() const {
 
 uint32_t Driver::getCurTickSpeed() const
 {
-	if (TIM_CR1(DMA_TRIGGER_TIMER) & TIM_CR1_CEN) {
+	if ((TIM_CR1(DMA_TRIGGER_TIMER) & TIM_CR1_CEN) and (DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_EN)) {
 		return (1000 * CLOCK_APB1_TIMER_CLK) / ((TIM_PSC(DMA_TRIGGER_TIMER) + 1) * TIM_ARR(DMA_TRIGGER_TIMER));
 	} else {
 		return 0;

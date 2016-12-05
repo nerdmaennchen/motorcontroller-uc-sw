@@ -65,13 +65,15 @@ if __name__ == "__main__":
 	
 	for i in range(len(targets)):
 		target = targets[i];
-		selectorStr = "[:]"
+		selectorStr = ""
 		if "[" in target and "]" in target:
 			selectorStr = target[target.index("["):target.index("]")+1]
 			target = target[0:target.index("[")]
-		selectors.append(eval(selectorStr))
 		targets[i] = target
 		l = getConfig(dev, configs, target);
+		if selectorStr == "":
+			selectorStr = "range(" + str(len(l)) + ")"
+		selectors.append(eval(selectorStr))
 		l = cutData(l, selectors[i])
 		for i in range(0, len(l)):
 			run.datas.append([])

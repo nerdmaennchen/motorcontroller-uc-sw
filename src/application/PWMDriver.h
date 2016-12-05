@@ -9,9 +9,9 @@ namespace pwmdriver
 #define PWM_TIMER TIM1
 
 // off time is before the PWM and after to there is always a PWM_OFF_TIME*2 off time between two consecutive PWM pulses
-constexpr uint32_t PwmPreOffTimer       = 32; // has to be something more than zero to enable a timeframe to fetch hall data via DMA
-constexpr uint32_t PwmAmplitude         = 256;
-constexpr uint32_t PwmPostOffTimer      = 32;
+constexpr uint32_t PwmPreOffTimer       = 8; // has to be something more than zero to enable a timeframe to fetch hall data via DMA
+constexpr uint32_t PwmAmplitude         = 128;
+constexpr uint32_t PwmPostOffTimer      = 8;
 
 constexpr uint32_t PwmCentralDutyMoment = PwmPreOffTimer + PwmAmplitude / 2;
 constexpr uint32_t PwmMinCyclePeriod    = PwmPreOffTimer + PwmAmplitude + PwmPostOffTimer;
