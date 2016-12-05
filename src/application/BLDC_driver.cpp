@@ -1,7 +1,8 @@
 #include "PWMDriver.h"
 #include "PWMLookupTableGenerator.h"
-#include "HallFeedback.h"
 #include "CurrentController.h"
+
+#include "MotorModel.h"
 
 #include "controller/PIDController.h"
 
@@ -11,42 +12,51 @@
 
 #include <interfaces/systemTime.h>
 
+#include "SiLi/SiLi.h"
+
 #include <cmath>
-#include <algorithm>
 
 
 namespace {
-template <typename T> int sgn(T val) {
+template <typename T> constexpr int sgn(T val) {
     return (T(0) < val) - (val < T(0));
 }
 
+constexpr float pi = 3.14159265359f;
 
 struct BLDC_driver final :
 		public flawless::Module,
-		public flawless::Callback<bool&, bool>,
-		public flawless::Callback<float&, bool>,
-		public flawless::Callback<int&, bool>,
 		public pwmdriver::DriverInterface,
-		public flawless::Listener<hall::Feedback, 0> {
-	flawless::ApplicationConfig<bool> mEnableBLDC                   {"bldc.enable", "B", this, false};
-	flawless::ApplicationConfig<Array<uint16_t, 8>> mHallIndexes    {"bldc.hall_mappings", "8H"};
-	flawless::ApplicationConfig<int> mTarget_frequency_mHz          {"bldc.target_frequency", "i", this, 0};
-	flawless::ApplicationConfig<int> mMaxAdvance                    {"bldc.advance", "i", -150};
-	flawless::ApplicationConfig<float> mShapeFactor                 {"bldc.shape_factor", "f", this, 0.f};
-	flawless::ApplicationConfig<int> mLastKnownPhase                {"bldc.cur_phase", "i", 0};
+		public flawless::Listener<MotorState, 0>
+{
 
-	flawless::ApplicationConfig<PIDControllerParams> mControllerParams {"bldc_controller", "6f", {0.f,0.f,0.f,
+	static constexpr int StepsCount = pwmdriver::StepsCount;
+	static constexpr int StepsPerPhase = StepsCount / 6;
+
+	bool mEnabled {false};
+	PIDController mController {
+	    	0.f
+			,0.f,
+			0.f,
 			2.5e-4f, // default P
 			2.e-2f,  // default I
-			2.6e-4f,
-	}};
+			2.6e-4f, // default D
+			0.f, 0.f, 0.f
+	};
 
-	PIDController mController{&(mControllerParams.get())};
 
-	float mTargetTickFrequency {0};
-	uint32_t mTargetStepFrequency {0};
+	float mOutput2Advance                {1e-2f};
+	int   mMaxAdvance                    {150};
+	float mMinControlOutput              {0.f};
+	float mTargetTickFrequency           {0.f};
+	uint32_t mTargetStepFrequency        {0};
 
-	uint32_t StepsCount {0};
+	float mShapeFactor {0.f};
+	float mAdvanceScale {1.f};
+	float mTargetPhase {0.f};
+	float mControl {0.f};
+	float mMinControl {.05f};
+
 	pwmdriver::Driver* driver {nullptr};
 	CurrentController& currentController {CurrentController::get()};
 	BLDC_driver(unsigned int level) : flawless::Module(level) {}
@@ -55,103 +65,133 @@ struct BLDC_driver final :
 	systemTime_t mLastUpdateTime;
 
 	void unclaim() override {
-		mEnableBLDC = false;
+		mEnabled = false;
 	}
 
-	void callback(bool& enable, bool setter) {
-		if (setter) {
-			if (enable) {
-				driver->claim(this);
-				callback(mTarget_frequency_mHz, true);
-				pwmdriver::CommutationPattern *commPattern = driver->getPattern();
+	void buildLookupTable() {
+		if (mEnabled) { // this implies we have claimed the memory to fill our commutation pattern
+			pwmdriver::CommutationPattern &commPattern = driver->getPattern();
+			// setup the pwm configs
+			PWMLookupTableGeneratorShaped lookupGenerator;
+			lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 0]));
+			lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 1]));
+			lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 2]));
+			lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 3]));
 
-				// setup the pwm configs
-				PWMLookupTableGeneratorShaped lookupGenerator;
-				lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, commPattern + StepsCount * 0);
-				lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, commPattern + StepsCount * 1);
-				lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, commPattern + StepsCount * 2);
-				lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, commPattern + StepsCount * 3);
-
-				// the last element contains information about when to sample the hall sensors
-				for (uint32_t i = 0; i < pwmdriver::StepsCount; ++i) {
-					commPattern[i*pwmdriver::TicksPerStep][pwmdriver::TicksPerStep-1] = 0;
-				}
-
-				mControllerParams->errorP = 0;
-				mControllerParams->errorI = 0;
-			} else {
-				driver->claim(nullptr);
+			// the last element contains information about when to sample the hall sensors
+			for (uint32_t i = 0; i < pwmdriver::CommutationPatternBufferSize; ++i) {
+				commPattern[i][pwmdriver::TicksPerStep-1] = 0; //pwmdriver::PwmPreOffTimer / 2;
 			}
 		}
 	}
 
-	void callback(float&, bool setter) {
-		callback(mEnableBLDC, setter);
-	}
-
-	void callback(int& target_frequency_mHz, bool setter) {
-		if (setter) {
-			if (sgn(mTargetTickFrequency) != sgn(target_frequency_mHz)) {
-				mControllerParams->errorP = 0;
-				mControllerParams->errorI = 0;
-			}
-			mTargetTickFrequency = float(target_frequency_mHz * 6.f / 1e3f);
-			mTargetStepFrequency = std::abs(target_frequency_mHz * int(StepsCount));
+	void enable(bool enable) {
+		mEnabled = enable;
+		if (enable) {
+			driver->claim(this);
+			buildLookupTable();
+			mController.errorP = 0;
+			mController.errorI = 0;
+		} else {
+			driver->claim(nullptr);
 		}
 	}
 
-	void callback(flawless::Message<hall::Feedback> const& hallFeedback) {
-		flawless::LockGuard lock;
+	void setTargetFrequency(float target_frequency) {
+		if (sgn(mTargetTickFrequency) != sgn(target_frequency)) {
+			mController.errorI = 0;
+		}
+		mTargetTickFrequency = float(target_frequency * 6.f);
+		mTargetStepFrequency = std::abs(int32_t(target_frequency * StepsCount));
+	}
 
-		mLastKnownPhase = mHallIndexes.get()[hallFeedback->currentHallValues];
-		if (mEnableBLDC) {
-			const float avgTickFreq = hallFeedback->tickFreq_Hz;
+
+	void callback(flawless::Message<MotorState> const& state) {
+		if (mEnabled) {
+			float const& speed = state->estSpeed;
+			float const& pos   = state->lastKnownPos;
+
 			systemTime_t now = time.getSystemTimeUS();
-			float dT = (now - mLastUpdateTime) / 1e6f;
-			float e  = (mTargetTickFrequency - avgTickFreq);
-
-			mController.setError(e, dT);
-			float controll = mController.getControll();
-			controll = std::min(1.f, std::max(-1.f, controll));
+			float dT = (now - mLastUpdateTime) * 1e-6f;
+			dT = std::max(1e-6, dT);
+			float e  = mTargetTickFrequency - speed;
 			mLastUpdateTime = now;
 
-			float powerOutput = std::abs(controll);
-			currentController.setPower(powerOutput);
-			int targetIndex = mLastKnownPhase;
-			if (controll > 0.f) {
-				targetIndex = mLastKnownPhase + mMaxAdvance;
-			} else {
-				targetIndex = mLastKnownPhase - mMaxAdvance;
-			}
-			targetIndex = myModulo(targetIndex, StepsCount);
+			mControl = mController.update(e, dT);
 
-			uint32_t stepFrequency = uint32_t(std::abs(avgTickFreq)) * 1000 * StepsCount;
-			if (avgTickFreq > 0.f) { // run clockwise
-				driver->runSteps(targetIndex, StepsCount / 6, stepFrequency, false);
+			currentController.setPower(std::max(mMinControl, std::abs(mControl)));
+
+//			mAdvanceScale = 1.f - 2.f / (1.f + std::exp(mOutput2Advance * (mTargetStepFrequency)));
+			mAdvanceScale = sgn(mControl);
+			int targetIndex = int(pos * (StepsPerPhase));
+			targetIndex += int(mMaxAdvance * mAdvanceScale);
+			targetIndex = myModulo(targetIndex, StepsCount);
+			mTargetPhase = float(targetIndex) / (StepsPerPhase);
+//			uint32_t stepFrequency = uint32_t(std::abs(state->estSpeed) * 1000 * StepsCount);
+			if (speed >= 0.f) { // run clockwise
+				driver->runSteps(targetIndex, 1, mTargetStepFrequency, false);
 			} else { // run counter clockwise
-				driver->runSteps(3 * StepsCount - targetIndex, StepsCount / 6, stepFrequency,false);
+				driver->runSteps(3 * StepsCount - targetIndex, 1, mTargetStepFrequency,false);
 			}
 		}
-	}
-
-	int myModulo(int a, int b) {
-		return (b + a % b) % b;
 	}
 
 	void init(unsigned int) {
 		driver = &(flawless::util::Singleton<pwmdriver::Driver>::get());
-		StepsCount = driver->getPatternSize() / 4;
-		callback(mEnableBLDC, true);
+		enable(mEnabled);
+	}
 
 
-		// setup the lookup tables
-		uint8_t step0 = 1; // at phase 0 we read a hall feedback of 1
-		for (int i=0; i < 6; ++i) {
-			int idx = (StepsCount/12) + (StepsCount/6) * i;
-			mHallIndexes.get()[step0]  = myModulo(idx, StepsCount);
-			step0 = hall::getNextStep(step0, true);
-		}
+	int myModulo(int a, int b) {
+		return (b + a % b) % b;
 	}
 } driver(10);
 
+// configuration Helpers
+
+struct : public flawless::Callback<bool&, bool> {
+flawless::ApplicationConfigMapping<bool> mEnableBLDC              {"bldc.enable", "B", this, driver.mEnabled};
+	void callback(bool& enable, bool setter) {
+		if (setter) {
+			driver.enable(enable);
+		}
+	}
+} enableHelper;
+
+struct : public flawless::Callback<float&, bool> {
+	flawless::ApplicationConfig<float> mTarget_frequency          {"bldc.target_frequency", "f", this, 0};
+	void callback(float& target, bool setter) {
+		if (setter) {
+			driver.setTargetFrequency(target);
+		}
+	}
+} targetFrequencyHelper;
+struct : public flawless::Callback<float&, bool> {
+	flawless::ApplicationConfigMapping<float> mShapeFactor        {"bldc.shape_factor", "f", this, driver.mShapeFactor};
+	void callback(float&, bool setter) {
+		if (setter) {
+			driver.buildLookupTable();
+		}
+	}
+} shapeFactorHelper;
+
+
+flawless::ApplicationConfigMapping<float> cfgFreq2AdvanceB2                 {"bldc.outp_2_advance",       "f", driver.mOutput2Advance};
+flawless::ApplicationConfigMapping<int>   cfgMaxAdvance                     {"bldc.advance",              "i", driver.mMaxAdvance};
+flawless::ApplicationConfigMapping<float> cfgMaxAdvanceScale                {"bldc.advance_scale",        "f", driver.mAdvanceScale};
+flawless::ApplicationConfigMapping<float> cfgControl                        {"bldc.control",              "f", driver.mControl};
+flawless::ApplicationConfigMapping<float> cfgTargetPhase                    {"bldc.target_phase",         "f", driver.mTargetPhase};
+flawless::ApplicationConfigMapping<float> cfgMinControlOutput               {"bldc.min_controll_output",  "f", driver.mMinControlOutput};
+
+flawless::ApplicationConfigMapping<float> cfgControllerEP                   {"bldc.controller.ep",         "f", driver.mController.errorP};
+flawless::ApplicationConfigMapping<float> cfgControllerEI                   {"bldc.controller.ei",         "f", driver.mController.errorI};
+flawless::ApplicationConfigMapping<float> cfgControllerED                   {"bldc.controller.ed",         "f", driver.mController.errorD};
+
+flawless::ApplicationConfigMapping<float> cfgControllerOP                   {"bldc.controller.op",         "f", driver.mController.outputP};
+flawless::ApplicationConfigMapping<float> cfgControllerOI                   {"bldc.controller.oi",         "f", driver.mController.outputI};
+flawless::ApplicationConfigMapping<float> cfgControllerOD                   {"bldc.controller.od",         "f", driver.mController.outputD};
+
+flawless::ApplicationConfigMapping<float> cfgControllerP                    {"bldc.controller.p",          "f", driver.mController.controllP};
+flawless::ApplicationConfigMapping<float> cfgControllerI                    {"bldc.controller.i",          "f", driver.mController.controllI};
+flawless::ApplicationConfigMapping<float> cfgControllerD                    {"bldc.controller.d",          "f", driver.mController.controllD};
 }

@@ -3,7 +3,8 @@
 #include <flawless/applicationConfig/ApplicationConfig.h>
 #include <algorithm>
 
-struct PIDControllerParams {
+struct PIDController final
+{
 	float errorP;
 	float errorI;
 	float errorD;
@@ -11,55 +12,44 @@ struct PIDControllerParams {
 	float controllP;
 	float controllI;
 	float controllD;
+
+	float outputP;
+	float outputI;
+	float outputD;
+
+	float update(float error, float dT) {
+		errorP = error;
+		errorI += error * dT;
+		errorD = (error - errorP) / dT;
+
+		float helper =  1.f / controllI;
+		errorI = std::max(-helper, std::min(helper, errorI));
+
+		outputP = errorP * controllP;
+		outputI = errorI * controllI;
+		outputD = errorD * controllD;
+
+		return outputP + outputI + outputD;
+	}
 };
 
-struct PIDController final
+struct PIController final
 {
-	PIDControllerParams *mParams;
-
-	PIDController(PIDControllerParams *params) : mParams(params) {}
-
-	void setError(float error, float dT) {
-		mParams->errorI += error * dT;
-		mParams->errorD = (error - mParams->errorP); // / dT;
-		mParams->errorP = error;
-
-		float helper =  1.f / mParams->controllI;
-		mParams->errorI = std::max(-helper, std::min(helper, mParams->errorI));
-	}
-
-	float getControll() {
-		float cP = mParams->errorP * mParams->controllP;
-		float cI = mParams->errorI * mParams->controllI;
-		float cD = mParams->errorD * mParams->controllD;
-		return  cP + cI + cD;
-	}
-};
-
-struct PIControllerParams {
 	float errorP;
 	float errorI;
 
 	float controllP;
 	float controllI;
-};
 
-struct PIController final
-{
-	PIControllerParams *mParams;
-	PIController(PIControllerParams *params) : mParams(params) {}
+	float update(float error, float dT) {
+		errorI += error * dT;
+		errorP = error;
 
-	void setError(float error, float dT) {
-		mParams->errorI += error * dT;
-		mParams->errorP = error;
+		float helper =  1.f / controllI;
+		errorI = std::max(-helper, std::min(helper, errorI));
 
-		float helper =  1.f / mParams->controllI;
-		mParams->errorI = std::max(-helper, std::min(helper, mParams->errorI));
-	}
-
-	float getControll() {
-		float cP = mParams->errorP * mParams->controllP;
-		float cI = mParams->errorI * mParams->controllI;
+		float cP = errorP * controllP;
+		float cI = errorI * controllI;
 		return  cP + cI;
 	}
 };

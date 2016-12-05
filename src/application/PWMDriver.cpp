@@ -60,23 +60,16 @@
 
 using namespace pwmdriver;
 
-using RemapType = Array<uint8_t, 4>;
-constexpr size_t commutationPatternBufferSize = 4 * StepsCount;
-using CommmutationPatternContainer = Array<CommutationPattern, commutationPatternBufferSize>;
-
 namespace {
-flawless::ApplicationConfig<CommmutationPatternContainer> gCommutationPattern {"commutation_pattern", "9600H"};
+CommutationPattern gCommutationPattern;
+flawless::ApplicationConfigMapping<CommutationPattern> cfgCommutationPattern {"commutation_pattern", "9600H", gCommutationPattern};
 uint32_t gLastSetSNDTR;
 DriverInterface* gCurrentInterface;
 }
 
 
-CommutationPattern* Driver::getPattern() {
-	return gCommutationPattern->data();
-}
-
-uint32_t Driver::getPatternSize() {
-	return gCommutationPattern->size();
+CommutationPattern& Driver::getPattern() {
+	return gCommutationPattern;
 }
 
 // make the PWM output the values from stepStart to stepStart+stepCnt automatically with
@@ -90,7 +83,7 @@ void Driver::runSteps(uint32_t stepStart, uint32_t stepCnt, uint32_t mHZ, bool c
 
 	DMA_HIFCR(CCR_DMA) = 0x3d << 0;
 
-	DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) &(gCommutationPattern.get()[stepStart]);
+	DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) &(gCommutationPattern[stepStart]);
 	DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) = gLastSetSNDTR = stepCnt * TicksPerStep;
 	if (cycle) {
 		DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_CIRC;
@@ -100,6 +93,7 @@ void Driver::runSteps(uint32_t stepStart, uint32_t stepCnt, uint32_t mHZ, bool c
 	TIM_SR(PWM_TIMER);
 	DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_EN;
 	set_mHZ(mHZ);
+	TIM_EGR(PWM_TIMER) = TIM_EGR_TG;
 }
 
 void Driver::set_mHZ(uint32_t mHZ) {
@@ -117,11 +111,20 @@ void Driver::set_mHZ(uint32_t mHZ) {
 	}
 }
 // get the index of the last performed step
-uint32_t Driver::getCurStep() {
+uint32_t Driver::getCurStep() const {
 	Array<uint16_t, TicksPerStep> const* curPtr = (Array<uint16_t, TicksPerStep> const*)DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM);
 	uint32_t stepsDone = (gLastSetSNDTR - DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM)) / TicksPerStep - ((DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_CIRC)?0:1);
-	uint32_t ptrOffset = curPtr - gCommutationPattern.get().begin();
+	uint32_t ptrOffset = curPtr - gCommutationPattern.begin();
 	return ptrOffset + stepsDone;
+}
+
+uint32_t Driver::getCurTickSpeed() const
+{
+	if (TIM_CR1(DMA_TRIGGER_TIMER) & TIM_CR1_CEN) {
+		return (1000 * CLOCK_APB1_TIMER_CLK) / ((TIM_PSC(DMA_TRIGGER_TIMER) + 1) * TIM_ARR(DMA_TRIGGER_TIMER));
+	} else {
+		return 0;
+	}
 }
 
 void Driver::setEnabled(bool enabled) {
@@ -292,8 +295,7 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 	void initPWMTimer() {
 		RCC_APB2ENR |= RCC_APB2ENR_TIM1EN;
 
-		TIM_CR1(PWM_TIMER) = TIM_CR1_CEN;
-//		TIM_CR1(PWM_TIMER) = 0;
+		TIM_CR1(PWM_TIMER)   = TIM_CR1_CMS_CENTER_3;
 		TIM_SMCR(PWM_TIMER) |= TIM_SMCR_TS_ITR2; // set timer 1 as slave to timer 3 (this should generate com events on updates of tim3)
 
 		TIM_CR2(PWM_TIMER)   = TIM_CR2_CCUS | TIM_CR2_CCPC | TIM_CR2_MMS_UPDATE;
@@ -318,6 +320,9 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 		TIM_SR(PWM_TIMER)   = 0;
 		TIM_EGR(PWM_TIMER)  = TIM_EGR_UG;
 		TIM_SR(PWM_TIMER)   = 0;
+
+		TIM_CR1(PWM_TIMER)  |= TIM_CR1_CEN;
+		TIM_RCR(PWM_TIMER)   = 1;
 	}
 
 	void initDMA()
@@ -348,7 +353,7 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 							| DMA_CR_MINC
 							;
 		DMA_SPAR(CCR_DMA, CCR_DMA_STREAM)  = (uint32_t) &(TIM_DMAR(PWM_TIMER));
-		DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) gCommutationPattern->data();
+		DMA_SM0AR(CCR_DMA, CCR_DMA_STREAM) = (uint32_t) gCommutationPattern.data();
 		gLastSetSNDTR = DMA_SNDTR(CCR_DMA, CCR_DMA_STREAM) = 1;
 	}
 

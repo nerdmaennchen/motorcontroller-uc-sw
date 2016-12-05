@@ -7,10 +7,15 @@
 
 namespace hall {
 
-struct Feedback {
-	uint64_t lastTickDelay_us;
-	float   tickFreq_Hz;
-	int currentHallValues;
+struct Timeout {
+	float    delaySinceLastTick;
+	int      currentHallValues;
+};
+
+struct Tick {
+	float    prevTickDelay;
+	float    tickFreq_Hz;
+	int      currentHallValues;
 };
 
 int getNextStep(int curStep, bool cw);

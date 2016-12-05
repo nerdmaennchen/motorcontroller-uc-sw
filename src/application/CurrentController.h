@@ -9,3 +9,7 @@ public:
 	void setPower(float power);
 	float getPower() const;
 };
+
+struct CurrentMeasurement {
+	float current;
+};

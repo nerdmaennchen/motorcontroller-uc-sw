@@ -56,10 +56,10 @@ public:
 		return mMsg;
 	}
 
-	template<msgID_t msgID>
+	template<msgID_t msgID = 0>
 	void post();
 
-	template<msgID_t msgID>
+	template<msgID_t msgID = 0>
 	void invokeDirectly();
 
 private:

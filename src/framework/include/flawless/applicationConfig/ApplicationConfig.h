@@ -78,6 +78,62 @@ public:
 	}
 };
 
+template<typename T>
+class ApplicationConfigMapping final : public ApplicationConfigBase
+{
+	const char* name;
+	const char* format;
+	T& value;
+	using callbackType = Callback<T&, bool>;
+	callbackType* mCB {nullptr};
+public:
+
+	ApplicationConfigMapping(const char* _name, const char* _format, T& map) : name(_name), format(_format), value(map) {}
+	ApplicationConfigMapping(const char* _name, const char* _format, callbackType* cb, T& map) : name(_name), format(_format), value(map), mCB(cb) {}
+
+	char const* getName() const override { return name; }
+	char const* getFormat() const override { return format; }
+
+	uint16_t getSize() const override {
+		return sizeof(T);
+	};
+
+	ApplicationConfig<T>& operator=(T const& rhs) {
+		value = rhs;
+		return *this;
+	}
+
+	T& get() {
+		return value;
+	}
+
+	operator T&() {
+		return value;
+	}
+
+	operator T const&() const {
+		return value;
+	}
+
+	T* operator->() {
+		return &value;
+	}
+
+	void setValue(void const* vals) {
+		memcpy(&value, vals, getSize());
+		if (mCB) {
+			mCB->callback(value, true);
+		}
+	}
+
+	void const* getValue() override {
+		if (mCB) {
+			mCB->callback(value, false);
+		}
+		return &value;
+	}
+};
+
 
 template<>
 class ApplicationConfig<void> final : public ApplicationConfigBase

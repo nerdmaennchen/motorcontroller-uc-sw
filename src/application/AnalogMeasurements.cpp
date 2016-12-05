@@ -81,28 +81,28 @@ public:
 			}
 
 			// uncomment to use the real average
-//			Array<int, numChannels> sums = {0,0,0,0};
-//			for (auto const& val : *buffer) {
-//				for (int i(0); i < numChannels; ++i) {
-//					sums[i] += val[i];
-//				}
-//			}
-//			meanMsg->motorCurrent    = float(sums[0]) * ScaleFactor;
-//			meanMsg->voltage_phase_U = float(sums[1]) * ScaleFactor;
-//			meanMsg->voltage_phase_V = float(sums[2]) * ScaleFactor;
-//			meanMsg->voltage_phase_W = float(sums[3]) * ScaleFactor;
-//			meanMsg->voltage_VPP     = float(sums[4]) * ScaleFactor;
+			Array<int, numChannels> sums = {0,0,0,0};
+			for (auto const& val : *buffer) {
+				for (int i(0); i < numChannels; ++i) {
+					sums[i] += val[i];
+				}
+			}
+			meanMsg->motorCurrent    = float(sums[0]) * ScaleFactor;
+			meanMsg->voltage_phase_U = float(sums[1]) * ScaleFactor;
+			meanMsg->voltage_phase_V = float(sums[2]) * ScaleFactor;
+			meanMsg->voltage_phase_W = float(sums[3]) * ScaleFactor;
+			meanMsg->voltage_VPP     = float(sums[4]) * ScaleFactor;
 
 			// just use the last measurement
-			meanMsg->motorCurrent    = float((*buffer)[Averaging-1][0]) * Measurement2Voltage;
-			meanMsg->voltage_phase_U = float((*buffer)[Averaging-1][1]) * Measurement2Voltage;
-			meanMsg->voltage_phase_V = float((*buffer)[Averaging-1][2]) * Measurement2Voltage;
-			meanMsg->voltage_phase_W = float((*buffer)[Averaging-1][3]) * Measurement2Voltage;
-			meanMsg->voltage_VPP     = float((*buffer)[Averaging-1][4]) * Measurement2Voltage;
+//			meanMsg->motorCurrent    = float((*buffer)[Averaging-1][0]) * Measurement2Voltage;
+//			meanMsg->voltage_phase_U = float((*buffer)[Averaging-1][1]) * Measurement2Voltage;
+//			meanMsg->voltage_phase_V = float((*buffer)[Averaging-1][2]) * Measurement2Voltage;
+//			meanMsg->voltage_phase_W = float((*buffer)[Averaging-1][3]) * Measurement2Voltage;
+//			meanMsg->voltage_VPP     = float((*buffer)[Averaging-1][4]) * Measurement2Voltage;
 			mLastVoltageMeasure = meanMsg;
 			mISRDelay = now - mLastPublishTime;
 			mLastPublishTime = now;
-			meanMsg.invokeDirectly<0>();
+			meanMsg.invokeDirectly();
 		}
 	}
 

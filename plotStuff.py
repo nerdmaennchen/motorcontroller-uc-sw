@@ -5,13 +5,19 @@ import matplotlib.animation as animation
 from sys import stdin
 import select
 
+def cutData(l, selector):
+	return tuple([l[idx] for idx in selector])
+
 def data_gen():
 	while True:
 		vals = ()
-		for target in targets:
-			vals = vals + getConfig(dev, configs, target)
+		for i in range(len(targets)):
+			target = targets[i]
+			l = getConfig(dev, configs, target);
+			l = cutData(l, selectors[i])
+			vals = vals + l
 		yield vals
-	
+
 numdata = 50
 xdata = list(range(0, numdata))
 def run(data):
@@ -53,16 +59,24 @@ if __name__ == "__main__":
 	targets = sys.argv[1:]
 	
 	lines = []
+	selectors = []
 	fig, ax = plt.subplots()
 	ax.set_xlim(0, numdata)
 	
-	for target in targets:
-		prototype = getConfig(dev, configs, target);
-		for i in range(0, len(prototype)):
+	for i in range(len(targets)):
+		target = targets[i];
+		selectorStr = "[:]"
+		if "[" in target and "]" in target:
+			selectorStr = target[target.index("["):target.index("]")+1]
+			target = target[0:target.index("[")]
+		selectors.append(eval(selectorStr))
+		targets[i] = target
+		l = getConfig(dev, configs, target);
+		l = cutData(l, selectors[i])
+		for i in range(0, len(l)):
 			run.datas.append([])
 			line, = ax.plot([], [], lw=2, label=target + ' ' + str(i))
 			lines.append(line)
-
 	plt.legend(handles=lines)
 	
 	ax.set_ylim(-2, 2)
