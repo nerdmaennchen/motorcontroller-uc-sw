@@ -7,7 +7,7 @@
 namespace flawless
 {
 
-template<typename T, msgID_t msgID>
+template<typename T, msgID_t msgID=0>
 class Listener : public flawless::util::LinkedListNode<Listener<T, msgID>>, public flawless::RefCallback<Message<T>>
 {};
 

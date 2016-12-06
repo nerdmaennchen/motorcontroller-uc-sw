@@ -10,12 +10,13 @@ namespace hall {
 struct Timeout {
 	float    delaySinceLastTick;
 	int      currentHallValues;
+	int      currentPos; // state indicates the angle and ranges from 0 to 11
 };
 
 struct Tick {
 	float    prevTickDelay;
-	float    tickFreq_Hz;
 	int      currentHallValues;
+	int      currentPos; // state indicates the angle and ranges from 0 to 11
 };
 
 int getNextStep(int curStep, bool cw);

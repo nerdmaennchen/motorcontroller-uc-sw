@@ -1,5 +1,5 @@
 
-#include "CurrentController.h"
+#include <application/CurrentSense.h>
 #include <libopencm3/stm32/f4/timer.h>
 
 #include <algorithm>
@@ -17,6 +17,8 @@
 #include <libopencm3/stm32/f4/rcc.h>
 #include <libopencm3/stm32/f4/gpio.h>
 
+#include <flawless/util/Singleton.h>
+
 namespace {
 flawless::MessageBufferMemory<CurrentMeasurement, 5> currentMeasurement;
 
@@ -27,16 +29,10 @@ static constexpr float regularisationEpsilon = 1e-5;
 
 struct : public flawless::Listener<VoltageMeasure, 0>
 {
-	flawless::ApplicationConfig<Voltage> mMotorCurrentMean{"current_ctl.current", "f"};
-	flawless::ApplicationConfig<Voltage> mMaxCurrent{"current_ctl.max_current", "f", 0.5f};
-	flawless::ApplicationConfig<Voltage> mCurrentP{"current_ctl.controll_p", "f", .05f};
-	flawless::ApplicationConfig<Voltage> mCurrentError{"current_ctl.error", "f"};
-	flawless::ApplicationConfig<Voltage> currentOutputScale{"current_ctl.output_scale", "f", 1.f};
+	flawless::ApplicationConfig<Voltage> mMotorCurrentMean{"motor.current", "f"};
 
 	flawless::ApplicationConfig<Voltage> v_gain{"current_ctl.v_gain", "f", 10.f};
 	flawless::ApplicationConfig<Voltage> v_ref{"current_ctl.v_ref", "f", 3.3f / 2.f};
-
-	flawless::ApplicationConfig<int> max_arr{"current_ctl.max_arr", "I", 0x1fff};
 
 	int measurementCouter {0};
 	bool calibrating      {false};
@@ -68,19 +64,6 @@ struct : public flawless::Listener<VoltageMeasure, 0>
 			return; // thow this measurement away
 		}
 
-
-		const float maxCurrent = mMaxCurrent*currentOutputScale;
-		mCurrentError = mMotorCurrentMean - maxCurrent;
-
-		int targetAmplitude =
-				int(float(TIM_ARR(PWM_TIMER) - pwmdriver::PwmPreOffTimer - pwmdriver::PwmPostOffTimer) *
-					(1.f + (mCurrentError / (maxCurrent + regularisationEpsilon)) * mCurrentP))
-					+ pwmdriver::PwmPreOffTimer + pwmdriver::PwmPostOffTimer;
-
-		targetAmplitude = std::min(max_arr.get(), targetAmplitude);
-		targetAmplitude = std::max(int(pwmdriver::PwmMinCyclePeriod), targetAmplitude);
-		TIM_ARR(PWM_TIMER) = targetAmplitude;
-
 		auto msg = flawless::getFreeMessage<CurrentMeasurement>();
 		if (msg) {
 			msg->current = mMotorCurrentMean;
@@ -101,17 +84,5 @@ struct InitHelper : public flawless::Module{
 } initHelper(50);
 }
 
-
-
-
-void CurrentController::setPower(float power)
-{
-	currentController.currentOutputScale = std::min(1.f, std::max(0.f, power));
-}
-
-float CurrentController::getPower() const
-{
-	return currentController.currentOutputScale;
-}
 
 

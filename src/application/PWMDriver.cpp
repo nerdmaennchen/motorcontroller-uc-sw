@@ -127,24 +127,6 @@ uint32_t Driver::getCurTickSpeed() const
 	}
 }
 
-void Driver::setEnabled(bool enabled) {
-	if (enabled) {
-		TIM_CR1(PWM_TIMER)  |= TIM_CR1_CEN;
-		TIM_BDTR(PWM_TIMER) |= TIM_BDTR_MOE;
-		TIM_EGR(PWM_TIMER) = TIM_EGR_COMG | TIM_EGR_UG;
-	} else {
-		TIM_BDTR(PWM_TIMER) &= ~TIM_BDTR_MOE;
-//		TIM_CR1(PWM_TIMER)  &= ~TIM_CR1_CEN;
-		TIM_CR1(DMA_TRIGGER_TIMER) &= ~TIM_CR1_CEN;
-
-		TIM_CCR1(PWM_TIMER) = 0;
-		TIM_CCR2(PWM_TIMER) = 0;
-		TIM_CCR3(PWM_TIMER) = 0;
-		TIM_CCR4(PWM_TIMER) = 0;
-		TIM_EGR(PWM_TIMER) = TIM_EGR_COMG | TIM_EGR_UG;
-	}
-}
-
 void Driver::claim(DriverInterface* interface) {
 	gCurrentInterface = interface;
 }
@@ -200,15 +182,6 @@ struct : public flawless::Callback<Array<uint16_t, TicksPerStep>&, bool> {
 	}
 	flawless::ApplicationConfig<Array<uint16_t, TicksPerStep>> mManualPWM {"pwm.manual", "4H", this};
 } manualPWMHelper;
-
-struct : public flawless::Callback<bool&, bool> {
-	void callback(bool& enable, bool set) override {
-		if (set) {
-			pwmdriver::Driver::get().setEnabled(enable);
-		}
-	}
-	flawless::ApplicationConfig<bool> mEnable {"pwm.enable", "B", this};
-} enableHelper;
 
 struct : public flawless::Callback<bool&, bool> {
 	void callback(bool& enable, bool set) override {
@@ -307,8 +280,8 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 
 		TIM_BDTR(PWM_TIMER)  = (pwm_deadTime & 0x7f);
 
-		TIM_PSC(PWM_TIMER)   = 0;
-		TIM_ARR(PWM_TIMER)   = pwmdriver::PwmMinCyclePeriod;
+		TIM_PSC(PWM_TIMER)   = 0xffff;
+		TIM_ARR(PWM_TIMER)   = 0xffff;
 		TIM_CNT(PWM_TIMER)   = 0;
 
 		TIM_CCR1(PWM_TIMER) = 0;

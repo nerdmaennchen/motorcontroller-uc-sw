@@ -42,6 +42,9 @@ flawless::MessageBufferMemory<hall::Timeout, 5> hallTimeoutMessageBuffer;
 
 Array<int, 8> const ccwNext  {0, 3, 6, 2, 5, 1, 4, 0};
 Array<int, 8> const cwNext {0, 5, 3, 1, 6, 4, 2, 0};
+
+Array<int, 8> hall2Pos; // translate a hall value to a position (0..11)
+
 }
 
 namespace hall {
@@ -68,86 +71,94 @@ enum class MovingDirection {
 constexpr uint32_t DebounceSize = 8;
 using DebounceBuffer = Array<int, DebounceSize>;
 
+constexpr uint32_t TickTimerBaseFrequency = CLOCK_APB1_CLK;
+constexpr uint32_t TickTimerFrequency = 1000000;
+
 namespace {
 struct HallManager : public flawless::Module {
 	HallManager(unsigned int level) : flawless::Module(level) {}
 
-
-	void notifyTimeout() {
-		auto msg = flawless::getFreeMessage<hall::Timeout>();
-		if (msg) {
-			msg->currentHallValues    = mHallStates;
-			msg->delaySinceLastTick   = mDelaySinceLastTick * (1.f / float(CLOCK_APB1_TIMER_CLK));
-			msg.invokeDirectly();
-		}
-	}
-
-	void publishTickMessage() {
-		auto msg = flawless::getFreeMessage<hall::Tick>();
-		if (msg) {
-			msg->currentHallValues    = mHallStates;
-			msg->prevTickDelay        = mPrevTickDelay      * (1.f / float(CLOCK_APB1_TIMER_CLK));
-			msg->tickFreq_Hz          = mEstimatedFrequency;
-			msg.invokeDirectly();
-		}
-	}
-
-	void notifyHallTick(int newHallStates) {
-		bool validTransition = false;
-		const int expectedCWState  = cwNext[mHallStates];
-		const int expectedCCWState = ccwNext[mHallStates];
-
-		float t = float(mDelaySinceLastTick) * (1.f / float(CLOCK_APB1_TIMER_CLK));
-		if (expectedCWState == newHallStates) {
-			++mOdometry;
-			validTransition = true;
-		} else if (expectedCCWState == newHallStates) {
-			--mOdometry;
-			t = -t;
-			validTransition = true;
-		} else {
-			++mInvalidTransitions;
-		}
-
-		mHallStates = newHallStates;
-		if (validTransition) {
-			mEstimatedFrequency = 1. / t;
-			mPrevTickDelay = mDelaySinceLastTick;
-			mDelaySinceLastTick = 0;
-			publishTickMessage();
-		}
-	}
-
-	flawless::ApplicationConfig<uint64_t> mDelaySinceLastTick  {"hall.delay", "Q", 0ULL};
-	flawless::ApplicationConfig<uint64_t> mPrevTickDelay       {"hall.delay_prev", "Q", 0ULL};
-	flawless::ApplicationConfig<float>    mEstimatedFrequency  {"hall.frequency", "f", 0.f};
-	flawless::ApplicationConfig<int>      mHallStates          {"hall.states", "I"};
-	flawless::ApplicationConfig<int64_t>  mOdometry            {"hall.odometry", "q"};
-	flawless::ApplicationConfig<int64_t>  mInvalidTransitions  {"hall.invalid_transitions", "q"};
-
-
-	flawless::ApplicationConfig<DebounceBuffer> mRawMeasureBuffer1 {"hall.debounce_buffer1", "1I"};
-	flawless::ApplicationConfig<DebounceBuffer> mRawMeasureBuffer2 {"hall.debounce_buffer2", "1I"};
-	flawless::ApplicationConfig<uint64_t>       mTicksCaptured {"hall.ticks_captured", "Q"};
-
-	void notifyDMADone() {
-		DebounceBuffer const* buffer = &(mRawMeasureBuffer2.get());
+	void testForTransition() {
+		DebounceBuffer const* buffer = &mRawMeasureBuffer2;
 		if (DMA_SCCR(HALL_DMA, HALL_DMA_STREAM) & DMA_CR_CT) {
-			buffer = &(mRawMeasureBuffer1.get());
+			buffer = &mRawMeasureBuffer1;
 		}
 		int state = (*buffer)[DebounceSize-1] & 0x7;
+		mCurrentPos = hall2Pos[state];
 		if (state == mHallStates) {
-			return;
-		}
-//		for (uint32_t i = 1; i < buffer->size(); ++i) {
-//			if (state != ((*buffer)[i] & 0x7)) {
-//				return;
-//			}
-//		}
+			// no transition happened
+			if (mDelaySinceLastTick > mMaxDelayTillNextTick) {
+				// timeout
+				// setup new "waiting" interval
+				mMaxDelayTillNextTick = std::min((mDelaySinceLastTick * 3) / 2, mMaxTickTimeout);
+				TIM_ARR(HALL_TIMER) = std::max(0xffffULL, mMaxDelayTillNextTick);
+				auto msg = flawless::getFreeMessage<hall::Timeout>();
+				if (msg) {
+					msg->currentHallValues    = mHallStates;
+					msg->delaySinceLastTick   = mDelaySinceLastTick * (1.f / float(TickTimerFrequency));
+					msg->currentPos           = mCurrentPos;
+					msg.invokeDirectly();
+				}
+			}
+		} else {
+			bool validTransition = false;
+			const int expectedCWState  = cwNext[mHallStates];
+			const int expectedCCWState = ccwNext[mHallStates];
 
-		flawless::LockGuard lock;
-		notifyHallTick(state);
+			if (expectedCWState == state) {
+				++mOdometry;
+				validTransition = true;
+				if (mMovingCCW) {
+					mMovingCCW = mMovingCW = false;
+				} else {
+					mMovingCCW = false;
+					mMovingCW = true;
+					mCurrentPos += 1;
+				}
+			} else if (expectedCCWState == state) {
+				--mOdometry;
+				validTransition = true;
+				if (mMovingCW) {
+					mMovingCCW = mMovingCW = false;
+				} else {
+					mMovingCW = false;
+					mMovingCCW = true;
+					mCurrentPos -= 1;
+				}
+			} else {
+				++mInvalidTransitions;
+			}
+			mHallStates = state;
+			if (validTransition) {
+				mPrevTickDelay = mDelaySinceLastTick;
+				mDelaySinceLastTick = 0;
+
+				auto msg = flawless::getFreeMessage<hall::Tick>();
+				if (msg) {
+					msg->currentHallValues    = mHallStates;
+					msg->prevTickDelay        = mPrevTickDelay      * (1.f / float(TickTimerFrequency));
+					msg->currentPos           = mCurrentPos;
+					msg.invokeDirectly();
+				}
+			}
+		}
 	}
+
+	uint64_t mDelaySinceLastTick    {0ULL};
+	uint64_t mMaxDelayTillNextTick  {0ULL};
+	uint64_t mMaxTickTimeout        {(TickTimerFrequency/1000) * 1000}; // 1s
+	bool     mMovingCW              {false};
+	bool     mMovingCCW             {false};
+	uint64_t mPrevTickDelay         {0ULL};
+	int      mHallStates            ;
+	int      mCurrentPos            ;
+	int64_t  mOdometry              ;
+	int64_t  mInvalidTransitions    ;
+	uint64_t mTicksCaptured         {0ULL};
+
+
+	DebounceBuffer mRawMeasureBuffer1;
+	DebounceBuffer mRawMeasureBuffer2;
 
 	void initDMA() {
 		RCC_AHB1ENR |= RCC_AHB1ENR_DMA2EN;
@@ -159,15 +170,15 @@ struct HallManager : public flawless::Module {
 				DMA_CR_DBM |
 				DMA_CR_PSIZE_WORD |
 				DMA_CR_MSIZE_WORD;
-		if (mRawMeasureBuffer1.get().size() > 1) {
+		if (mRawMeasureBuffer1.size() > 1) {
 			DMA_SCCR(HALL_DMA, HALL_DMA_STREAM) |= DMA_CR_MINC;
 		}
 
-		nvic_enable_irq(NVIC_DMA2_STREAM5_IRQ);
+//		nvic_enable_irq(NVIC_DMA2_STREAM5_IRQ);
 		DMA_SPAR(HALL_DMA, HALL_DMA_STREAM)  = (uint32_t) (&(GPIO_IDR(HALL_PORT)));
-		DMA_SNDTR(HALL_DMA, HALL_DMA_STREAM) = mRawMeasureBuffer1.get().size();
-		DMA_SM0AR(HALL_DMA, HALL_DMA_STREAM) = (uint32_t) (mRawMeasureBuffer1.get().data());
-		DMA_SM1AR(HALL_DMA, HALL_DMA_STREAM) = (uint32_t) (mRawMeasureBuffer2.get().data());
+		DMA_SNDTR(HALL_DMA, HALL_DMA_STREAM) = mRawMeasureBuffer1.size();
+		DMA_SM0AR(HALL_DMA, HALL_DMA_STREAM) = (uint32_t) (mRawMeasureBuffer1.data());
+		DMA_SM1AR(HALL_DMA, HALL_DMA_STREAM) = (uint32_t) (mRawMeasureBuffer2.data());
 		DMA_SCCR(HALL_DMA, HALL_DMA_STREAM) |=  DMA_CR_TCIE;
 		DMA_SCCR(HALL_DMA, HALL_DMA_STREAM) |= DMA_CR_EN;
 
@@ -183,8 +194,8 @@ struct HallManager : public flawless::Module {
 		TIM_CCER(HALL_TIMER) |= TIM_CCER_CC1E;
 
 
-		TIM_PSC(HALL_TIMER)   = 0;
-		TIM_ARR(HALL_TIMER)   = (1<<16)-1;
+		TIM_PSC(HALL_TIMER)   = TickTimerBaseFrequency / TickTimerFrequency - 1;
+		TIM_ARR(HALL_TIMER)   = std::max(0xffffULL, mMaxTickTimeout);
 
 		TIM_CNT(HALL_TIMER)   = 0;
 		TIM_CR1(HALL_TIMER)   = TIM_CR1_URS | TIM_CR1_CEN;
@@ -200,10 +211,21 @@ struct HallManager : public flawless::Module {
 		gpio_mode_setup(HALL_PORT, GPIO_MODE_AF, GPIO_PUPD_PULLUP, HALL_PINS);
 		gpio_set_af(HALL_PORT, GPIO_AF1, HALL_PINS);
 
+
+		int step = 4; // at phase 1 we read a hall feedback of 4
+		for (int i=0; i < 6; ++i) {
+			hall2Pos[step] = (2*i)+1;
+			step = hall::getNextStep(step, true);
+		}
+
 		SystemTime::get().sleep(1000); // 1ms delay to settle the pullups
 		mHallStates = hall::readHallState();
-		mPrevTickDelay = uint64_t(-1);
-		publishTickMessage();
+		mCurrentPos = hall2Pos[mHallStates];
+		for (auto &debounceState : mRawMeasureBuffer1) { debounceState = mCurrentPos; }
+		for (auto &debounceState : mRawMeasureBuffer2) { debounceState = mCurrentPos; }
+		mMaxDelayTillNextTick = mMaxTickTimeout;
+		mDelaySinceLastTick = mMaxDelayTillNextTick + 1;
+		testForTransition();
 
 		initDMA();
 		initTimer();
@@ -219,19 +241,17 @@ void tim2_isr()
 	ISRTime isrTimer;
 	int sr = TIM_SR(HALL_TIMER);
 	TIM_SR(HALL_TIMER) = 0;
+
 	if (sr & TIM_SR_UIF) {
 		hallManager.mDelaySinceLastTick += TIM_ARR(HALL_TIMER);
-		hallManager.notifyTimeout();
+		hallManager.testForTransition();
 	}
 	if (sr & TIM_SR_CC1IF) {
 		ticks += TIM_CCR1(HALL_TIMER);
 		hallManager.mDelaySinceLastTick += TIM_CCR1(HALL_TIMER);
 		++(hallManager.mTicksCaptured);
 		TIM_CCR1(HALL_TIMER) = 0;
-		if (ticks > TIM_ARR(HALL_TIMER)) {
-			ticks = 0;
-			hallManager.notifyTimeout();
-		}
+		hallManager.testForTransition();
 	}
 }
 
@@ -239,8 +259,20 @@ void dma2_stream5_isr()
 {
 	ISRTime isrTimer;
 	ticks = 0;
-	hallManager.notifyDMADone();
+	hallManager.testForTransition();
 	DMA_HIFCR(HALL_DMA) = 0x3d<<6;
 }
 }
 
+namespace
+{
+
+flawless::ApplicationConfigMapping<uint64_t> mTicksCaptured       {"hall.ticks_captured",      "Q", hallManager.mTicksCaptured}; // only for debug purposes
+
+flawless::ApplicationConfigMapping<uint64_t> mDelaySinceLastTick  {"hall.delay",               "Q", hallManager.mDelaySinceLastTick};
+flawless::ApplicationConfigMapping<uint64_t> mPrevTickDelay       {"hall.delay_prev",          "Q", hallManager.mPrevTickDelay};
+flawless::ApplicationConfigMapping<int>      mHallStates          {"hall.states",              "I", hallManager.mHallStates};
+flawless::ApplicationConfigMapping<int>      mHallPhase           {"hall.phase",               "I", hallManager.mCurrentPos};
+flawless::ApplicationConfigMapping<int64_t>  mOdometry            {"hall.odometry",            "q", hallManager.mOdometry};
+flawless::ApplicationConfigMapping<int64_t>  mInvalidTransitions  {"hall.invalid_transitions", "q", hallManager.mInvalidTransitions};
+}

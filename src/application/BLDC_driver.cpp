@@ -1,8 +1,6 @@
+#include "CurrentSense.h"
 #include "PWMDriver.h"
-#include "PWMLookupTableGenerator.h"
-#include "CurrentController.h"
-
-#include "MotorModel.h"
+#include "HallFeedback.h"
 
 #include "controller/PIDController.h"
 
@@ -27,9 +25,10 @@ constexpr float pi = 3.14159265359f;
 struct BLDC_driver final :
 		public flawless::Module,
 		public pwmdriver::DriverInterface,
-		public flawless::Listener<MotorState, 0>
+		public flawless::Listener<hall::Tick>,
+		public flawless::Listener<hall::Timeout>,
+		public flawless::Listener<CurrentMeasurement>
 {
-
 	static constexpr int StepsCount = pwmdriver::StepsCount;
 	static constexpr int StepsPerPhase = StepsCount / 6;
 
@@ -51,14 +50,12 @@ struct BLDC_driver final :
 	float mTargetTickFrequency           {0.f};
 	uint32_t mTargetStepFrequency        {0};
 
-	float mShapeFactor {0.f};
 	float mAdvanceScale {1.f};
 	float mTargetPhase {0.f};
 	float mControl {0.f};
 	float mMinControl {.05f};
 
 	pwmdriver::Driver* driver {nullptr};
-	CurrentController& currentController {CurrentController::get()};
 	BLDC_driver(unsigned int level) : flawless::Module(level) {}
 
 	SystemTime& time = SystemTime::get();
@@ -69,19 +66,50 @@ struct BLDC_driver final :
 	}
 
 	void buildLookupTable() {
-		if (mEnabled) { // this implies we have claimed the memory to fill our commutation pattern
-			pwmdriver::CommutationPattern &commPattern = driver->getPattern();
-			// setup the pwm configs
-			PWMLookupTableGeneratorShaped lookupGenerator;
-			lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 0]));
-			lookupGenerator.generateLookupTable(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 1]));
-			lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 2]));
-			lookupGenerator.generateLookupTableReversed(3, StepsCount, mShapeFactor, &(commPattern[StepsCount * 3]));
+		// setup the pwm configs
+		pwmdriver::CommutationPattern &commPattern = driver->getPattern();
 
-			// the last element contains information about when to sample the hall sensors
-			for (uint32_t i = 0; i < pwmdriver::CommutationPatternBufferSize; ++i) {
-				commPattern[i][pwmdriver::TicksPerStep-1] = 0; //pwmdriver::PwmPreOffTimer / 2;
+		for (auto &element : commPattern) {
+			for (auto & sElement : element) {
+				sElement = 0;
 			}
+		}
+
+		// build the U-signal
+		for (int i = 0; i < 2*StepsPerPhase; ++i) {
+			const float s = std::sin(float(i) * (2 * pi / float(StepsCount)));
+			commPattern[i][0] = uint16_t(std::round(s * pwmdriver::PwmAmplitude) + pwmdriver::PwmPreOffTimer);
+		}
+		// mirror that
+		for (int i = 0; i < 2*StepsPerPhase; ++i) {
+			commPattern[4*StepsPerPhase-i-1][0] = commPattern[i][0];
+		}
+		// build the V-Signal
+		for (int i = 0; i < 4*StepsPerPhase; ++i) {
+			commPattern[2*StepsPerPhase+i][1] = commPattern[i][0];
+		}
+		// build the W-Signal
+		for (int i = 0; i < 4*StepsPerPhase; ++i) {
+			commPattern[(4*StepsPerPhase + i) % StepsCount][2] = commPattern[i][0];
+		}
+
+		// copy everything from the first whole commutation pattern buffer to the second
+		for (int i = 0; i < StepsCount; ++i) {
+			for (int j = 0; j < 3; ++j) {
+				commPattern[StepsCount+i][j] = commPattern[i][j];
+			}
+		}
+
+		// mirror the left half of the buffer to the right half to get the CCW-Pattern
+		for (int i = 0; i < 2*StepsCount; ++i) {
+			for (int j = 0; j < 3; ++j) {
+				commPattern[pwmdriver::CommutationPatternBufferSize-i-1][j] = commPattern[i][j];
+			}
+		}
+
+		// the last element contains information about when to sample the hall sensors
+		for (uint32_t i = 0; i < pwmdriver::CommutationPatternBufferSize; ++i) {
+			commPattern[i][pwmdriver::TicksPerStep-1] = 0;
 		}
 	}
 
@@ -89,10 +117,11 @@ struct BLDC_driver final :
 		mEnabled = enable;
 		if (enable) {
 			driver->claim(this);
-			buildLookupTable();
 			mController.errorP = 0;
 			mController.errorI = 0;
+			TIM_BDTR(PWM_TIMER) |= TIM_BDTR_MOE;
 		} else {
+			TIM_BDTR(PWM_TIMER) &= ~TIM_BDTR_MOE;
 			driver->claim(nullptr);
 		}
 	}
@@ -106,38 +135,45 @@ struct BLDC_driver final :
 	}
 
 
-	void callback(flawless::Message<MotorState> const& state) {
+	void callback(flawless::Message<CurrentMeasurement> const& current) {
+
+	}
+
+	void callback(flawless::Message<hall::Timeout> const& state) {
+
+	}
+
+	void callback(flawless::Message<hall::Tick> const& state) {
 		if (mEnabled) {
-			float const& speed = state->estSpeed;
-			float const& pos   = state->lastKnownPos;
-
-			systemTime_t now = time.getSystemTimeUS();
-			float dT = (now - mLastUpdateTime) * 1e-6f;
-			dT = std::max(1e-6, dT);
-			float e  = mTargetTickFrequency - speed;
-			mLastUpdateTime = now;
-
-			mControl = mController.update(e, dT);
-
-			currentController.setPower(std::max(mMinControl, std::abs(mControl)));
-
-//			mAdvanceScale = 1.f - 2.f / (1.f + std::exp(mOutput2Advance * (mTargetStepFrequency)));
-			mAdvanceScale = sgn(mControl);
-			int targetIndex = int(pos * (StepsPerPhase));
-			targetIndex += int(mMaxAdvance * mAdvanceScale);
-			targetIndex = myModulo(targetIndex, StepsCount);
-			mTargetPhase = float(targetIndex) / (StepsPerPhase);
-//			uint32_t stepFrequency = uint32_t(std::abs(state->estSpeed) * 1000 * StepsCount);
-			if (speed >= 0.f) { // run clockwise
-				driver->runSteps(targetIndex, 1, mTargetStepFrequency, false);
-			} else { // run counter clockwise
-				driver->runSteps(3 * StepsCount - targetIndex, 1, mTargetStepFrequency,false);
-			}
+//			float const& speed = state->estSpeed;
+//			float const& pos   = state->lastKnownPos;
+//
+//			systemTime_t now = time.getSystemTimeUS();
+//			float dT = (now - mLastUpdateTime) * 1e-6f;
+//			dT = std::max(1e-6, dT);
+//			float e  = mTargetTickFrequency - speed;
+//			mLastUpdateTime = now;
+//
+//			mControl = mController.update(e, dT);
+//
+////			mAdvanceScale = 1.f - 2.f / (1.f + std::exp(mOutput2Advance * (mTargetStepFrequency)));
+//			mAdvanceScale = sgn(mControl);
+//			int targetIndex = int(pos * (StepsPerPhase));
+//			targetIndex += int(mMaxAdvance * mAdvanceScale);
+//			targetIndex = myModulo(targetIndex, StepsCount);
+//			mTargetPhase = float(targetIndex) / (StepsPerPhase);
+////			uint32_t stepFrequency = uint32_t(std::abs(state->estSpeed) * 1000 * StepsCount);
+//			if (speed >= 0.f) { // run clockwise
+//				driver->runSteps(targetIndex, 1, mTargetStepFrequency, false);
+//			} else { // run counter clockwise
+//				driver->runSteps(3 * StepsCount - targetIndex, 1, mTargetStepFrequency,false);
+//			}
 		}
 	}
 
 	void init(unsigned int) {
 		driver = &(flawless::util::Singleton<pwmdriver::Driver>::get());
+		buildLookupTable();
 		enable(mEnabled);
 	}
 
@@ -166,15 +202,6 @@ struct : public flawless::Callback<float&, bool> {
 		}
 	}
 } targetFrequencyHelper;
-struct : public flawless::Callback<float&, bool> {
-	flawless::ApplicationConfigMapping<float> mShapeFactor        {"bldc.shape_factor", "f", this, driver.mShapeFactor};
-	void callback(float&, bool setter) {
-		if (setter) {
-			driver.buildLookupTable();
-		}
-	}
-} shapeFactorHelper;
-
 
 flawless::ApplicationConfigMapping<float> cfgFreq2AdvanceB2                 {"bldc.outp_2_advance",       "f", driver.mOutput2Advance};
 flawless::ApplicationConfigMapping<int>   cfgMaxAdvance                     {"bldc.advance",              "i", driver.mMaxAdvance};

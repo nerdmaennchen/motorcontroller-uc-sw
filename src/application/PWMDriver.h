@@ -2,6 +2,7 @@
 #include <flawless/stdtypes.h>
 #include <flawless/util/Array.h>
 #include <flawless/util/Singleton.h>
+#include <libopencm3/stm32/f4/timer.h>
 
 namespace pwmdriver
 {
@@ -9,12 +10,11 @@ namespace pwmdriver
 #define PWM_TIMER TIM1
 
 // off time is before the PWM and after to there is always a PWM_OFF_TIME*2 off time between two consecutive PWM pulses
-constexpr uint32_t PwmPreOffTimer       = 8; // has to be something more than zero to enable a timeframe to fetch hall data via DMA
+constexpr uint32_t PwmPreOffTimer       = 0; // has to be something more than zero to enable a timeframe to fetch hall data via DMA
 constexpr uint32_t PwmAmplitude         = 128;
-constexpr uint32_t PwmPostOffTimer      = 8;
 
 constexpr uint32_t PwmCentralDutyMoment = PwmPreOffTimer + PwmAmplitude / 2;
-constexpr uint32_t PwmMinCyclePeriod    = PwmPreOffTimer + PwmAmplitude + PwmPostOffTimer;
+constexpr uint32_t PwmMinCyclePeriod    = PwmPreOffTimer + PwmAmplitude;
 
 constexpr uint32_t StepsCount   = 600;
 constexpr uint32_t TicksPerStep = 4;
