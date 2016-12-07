@@ -27,6 +27,9 @@
 #include <cmath>
 
 
+#define DBG_TIMER_PORT GPIOB
+#define DBG_TIMER_PIN  GPIO9
+
 #define SENSE_PORT_1  GPIOB
 #define SENSE_PIN_C   GPIO0
 
@@ -80,25 +83,25 @@ public:
 				buffer = &(mRawMeasureBuffer1.get());
 			}
 
-			// uncomment to use the real average
-//			Array<int, numChannels> sums = {0,0,0,0};
-//			for (auto const& val : *buffer) {
-//				for (int i(0); i < numChannels; ++i) {
-//					sums[i] += val[i];
-//				}
-//			}
-//			meanMsg->motorCurrent    = float(sums[0]) * ScaleFactor;
-//			meanMsg->voltage_phase_U = float(sums[1]) * ScaleFactor;
-//			meanMsg->voltage_phase_V = float(sums[2]) * ScaleFactor;
-//			meanMsg->voltage_phase_W = float(sums[3]) * ScaleFactor;
-//			meanMsg->voltage_VPP     = float(sums[4]) * ScaleFactor;
+//			 uncomment to use the real average
+			Array<int, numChannels> sums = {0,0,0,0};
+			for (auto const& val : *buffer) {
+				for (int i(0); i < numChannels; ++i) {
+					sums[i] += val[i];
+				}
+			}
+			meanMsg->motorCurrent    = float(sums[0]) * ScaleFactor;
+			meanMsg->voltage_phase_U = float(sums[1]) * ScaleFactor;
+			meanMsg->voltage_phase_V = float(sums[2]) * ScaleFactor;
+			meanMsg->voltage_phase_W = float(sums[3]) * ScaleFactor;
+			meanMsg->voltage_VPP     = float(sums[4]) * ScaleFactor;
 
 			// just use the last measurement
-			meanMsg->motorCurrent    = float((*buffer)[Averaging-1][0]) * Measurement2Voltage;
-			meanMsg->voltage_phase_U = float((*buffer)[Averaging-1][1]) * Measurement2Voltage;
-			meanMsg->voltage_phase_V = float((*buffer)[Averaging-1][2]) * Measurement2Voltage;
-			meanMsg->voltage_phase_W = float((*buffer)[Averaging-1][3]) * Measurement2Voltage;
-			meanMsg->voltage_VPP     = float((*buffer)[Averaging-1][4]) * Measurement2Voltage;
+//			meanMsg->motorCurrent    = float((*buffer)[Averaging-1][0]) * Measurement2Voltage;
+//			meanMsg->voltage_phase_U = float((*buffer)[Averaging-1][1]) * Measurement2Voltage;
+//			meanMsg->voltage_phase_V = float((*buffer)[Averaging-1][2]) * Measurement2Voltage;
+//			meanMsg->voltage_phase_W = float((*buffer)[Averaging-1][3]) * Measurement2Voltage;
+//			meanMsg->voltage_VPP     = float((*buffer)[Averaging-1][4]) * Measurement2Voltage;
 			mLastVoltageMeasure = meanMsg;
 			mISRDelay = now - mLastPublishTime;
 			mLastPublishTime = now;
@@ -119,7 +122,7 @@ public:
 		ADC_CR2(SENSE_ADC) = ADC_CR2_ADON;
 
 		ADC_CR1(SENSE_ADC) = ADC_CR1_SCAN;
-		ADC_CR2(SENSE_ADC) |= ADC_CR2_EXTEN_FALLING_EDGE | ADC_CR2_EXTSEL_TIM4_CC4;
+		ADC_CR2(SENSE_ADC) |= ADC_CR2_EXTEN_BOTH_EDGES | ADC_CR2_EXTSEL_TIM4_CC4;
 		ADC_CR2(SENSE_ADC) |= ADC_CR2_DDS | ADC_CR2_DMA;
 
 		ADC_SQR1(SENSE_ADC) = ((numChannels-1) << ADC_SQR1_L_LSB);
@@ -176,7 +179,7 @@ public:
 		TIM_CNT(SENSE_TRIGGER_TIMER) = 0;
 		TIM_SMCR(SENSE_TRIGGER_TIMER) = TIM_SMCR_TS_ITR0 | TIM_SMCR_SMS_RM;
 
-		TIM_CCMR2(SENSE_TRIGGER_TIMER) = TIM_CCMR2_OC4M_PWM1;
+		TIM_CCMR2(SENSE_TRIGGER_TIMER)= TIM_CCMR2_OC4M_TOGGLE;
 		TIM_CCER(SENSE_TRIGGER_TIMER) = TIM_CCER_CC4E;
 
 		TIM_CCR4(SENSE_TRIGGER_TIMER)  = enableConfig;
@@ -189,7 +192,7 @@ public:
 	void callback(uint16_t&, bool) override {
 		TIM_CCR4(SENSE_TRIGGER_TIMER)  = enableConfig;
 	}
-	flawless::ApplicationConfig<uint16_t> enableConfig{"motor_current_adc_delay", "H", this, pwmdriver::PwmCentralDutyMoment};
+	flawless::ApplicationConfig<uint16_t> enableConfig{"analog.adc_delay", "H", this, 0};
 
 
 	void init(unsigned int) override {
@@ -197,8 +200,11 @@ public:
 		initDMA();
 		initAuxTimer();
 		initADC();
+
+//		gpio_mode_setup(DBG_TIMER_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, DBG_TIMER_PIN);
+//		gpio_set_af(DBG_TIMER_PORT, GPIO_AF2, DBG_TIMER_PIN);
 	}
-} analogMeasurement(8);
+} analogMeasurement(5);
 
 
 extern "C" {

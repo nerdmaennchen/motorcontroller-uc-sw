@@ -73,7 +73,7 @@ CommutationPattern& Driver::getPattern() {
 }
 
 // make the PWM output the values from stepStart to stepStart+stepCnt automatically with
-void Driver::runSteps(uint32_t stepStart, uint32_t stepCnt, uint32_t mHZ, bool cycle) {
+void Driver::runSteps(uint32_t stepStart, uint32_t stepCnt, uint32_t delayUS, bool cycle) {
 	do {
 		DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) &= ~DMA_CR_EN;
 	} while (0 != (DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) & DMA_CR_EN));
@@ -92,13 +92,13 @@ void Driver::runSteps(uint32_t stepStart, uint32_t stepCnt, uint32_t mHZ, bool c
 	}
 	TIM_SR(PWM_TIMER);
 	DMA_SCCR(CCR_DMA, CCR_DMA_STREAM) |= DMA_CR_EN;
-	set_mHZ(mHZ);
 	TIM_EGR(PWM_TIMER) = TIM_EGR_TG;
+	set_delay(delayUS);
 }
 
-void Driver::set_mHZ(uint32_t mHZ) {
-	if (mHZ) {
-		const uint64_t delayTicks = (CLOCK_APB1_TIMER_CLK * 1000) / mHZ;
+void Driver::set_delay(uint32_t delayUS) {
+	if (delayUS) {
+		const uint64_t delayTicks = ((CLOCK_APB1_TIMER_CLK) * delayUS) / 1000000;
 		uint16_t psc = (delayTicks >> 16) & 0xffff;
 		uint16_t arr = delayTicks / (psc + 1);
 		TIM_PSC(DMA_TRIGGER_TIMER)  = psc;
@@ -268,20 +268,20 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 	void initPWMTimer() {
 		RCC_APB2ENR |= RCC_APB2ENR_TIM1EN;
 
-		TIM_CR1(PWM_TIMER)   = TIM_CR1_CMS_CENTER_3;
+		TIM_CR1(PWM_TIMER)   = TIM_CR1_CMS_EDGE;
 		TIM_SMCR(PWM_TIMER) |= TIM_SMCR_TS_ITR2; // set timer 1 as slave to timer 3 (this should generate com events on updates of tim3)
 
-		TIM_CR2(PWM_TIMER)   = TIM_CR2_CCUS | TIM_CR2_CCPC | TIM_CR2_MMS_UPDATE;
+		TIM_CR2(PWM_TIMER)   = TIM_CR2_CCUS | TIM_CR2_CCPC | TIM_CR2_MMS_COMPARE_OC4REF;
 
 		TIM_CCMR1(PWM_TIMER) = TIM_CCMR1_OC1M_PWM1 | TIM_CCMR1_OC2M_PWM1 | TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE;
-		TIM_CCMR2(PWM_TIMER) = TIM_CCMR2_OC3M_PWM1 | TIM_CCMR2_OC3PE;
+		TIM_CCMR2(PWM_TIMER) = TIM_CCMR2_OC3M_PWM1 | TIM_CCMR2_OC3PE | TIM_CCMR2_OC4M_PWM2 | TIM_CCMR2_OC4PE;
 		TIM_CCER(PWM_TIMER)  = TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E
 				 | TIM_CCER_CC1NE | TIM_CCER_CC2NE | TIM_CCER_CC3NE;
 
-		TIM_BDTR(PWM_TIMER)  = (pwm_deadTime & 0x7f);
+		TIM_BDTR(PWM_TIMER)  = TIM_BDTR_OSSI | (pwm_deadTime & 0x7f);
 
-		TIM_PSC(PWM_TIMER)   = 0xffff;
-		TIM_ARR(PWM_TIMER)   = 0xffff;
+		TIM_PSC(PWM_TIMER)   = 0xf;
+		TIM_ARR(PWM_TIMER)   = 0xff;
 		TIM_CNT(PWM_TIMER)   = 0;
 
 		TIM_CCR1(PWM_TIMER) = 0;
@@ -295,7 +295,7 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 		TIM_SR(PWM_TIMER)   = 0;
 
 		TIM_CR1(PWM_TIMER)  |= TIM_CR1_CEN;
-		TIM_RCR(PWM_TIMER)   = 1;
+//		TIM_RCR(PWM_TIMER)   = 1;
 	}
 
 	void initDMA()
@@ -364,6 +364,6 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 		initDMA();
 		initSPI();
 	}
-} initHelper(5);
+} initHelper(6);
 }
 

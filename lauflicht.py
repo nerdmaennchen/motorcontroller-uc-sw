@@ -1,4 +1,4 @@
-from usbtest import *
+from usbctl import *
 import struct as st
 import time
 import random
@@ -52,5 +52,5 @@ if __name__ == "__main__":
 	configs = fetchConfig(dev)
 	numLEDs = int(configs["led_values"][1] / 4)
 	
-	fade()
+	randomStuff()
 

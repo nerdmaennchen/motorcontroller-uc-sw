@@ -18,12 +18,18 @@ struct PIDController final
 	float outputD;
 
 	float update(float error, float dT) {
+		if (dT) {
+			errorD = (error - errorP) / dT;
+			errorI += error * dT;
+		} else {
+			errorD = 0.f;
+		}
 		errorP = error;
-		errorI += error * dT;
-		errorD = (error - errorP) / dT;
 
-		float helper =  1.f / controllI;
-		errorI = std::max(-helper, std::min(helper, errorI));
+		if (controllI) {
+			float helper =  1.f / controllI;
+			errorI = std::max(-helper, std::min(helper, errorI));
+		}
 
 		outputP = errorP * controllP;
 		outputI = errorI * controllI;

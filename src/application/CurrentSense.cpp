@@ -31,8 +31,8 @@ struct : public flawless::Listener<VoltageMeasure, 0>
 {
 	flawless::ApplicationConfig<Voltage> mMotorCurrentMean{"motor.current", "f"};
 
-	flawless::ApplicationConfig<Voltage> v_gain{"current_ctl.v_gain", "f", 10.f};
-	flawless::ApplicationConfig<Voltage> v_ref{"current_ctl.v_ref", "f", 3.3f / 2.f};
+	flawless::ApplicationConfig<Voltage> v_gain{"motor.current.v_gain", "f", 10.f};
+	flawless::ApplicationConfig<Voltage> v_ref{"motor.current.v_ref", "f", 3.3f / 2.f};
 
 	int measurementCouter {0};
 	bool calibrating      {false};

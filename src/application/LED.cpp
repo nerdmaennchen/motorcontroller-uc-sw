@@ -27,8 +27,8 @@ constexpr uint32_t bytesToSubstituteCnt(uint32_t bytes) {
 }
 
 
-constexpr uint32_t LED_PORT = GPIOC;
-constexpr uint32_t LED_PIN    = GPIO3;
+constexpr uint32_t LED_PORT = GPIOB;
+constexpr uint32_t LED_PIN  = GPIO15;
 
 constexpr uint32_t LED_SPI         = SPI2;
 constexpr uint32_t LED_DMA         = DMA1;
@@ -87,7 +87,7 @@ struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool
 	}
 
 	void setupSPI() {
-		RCC_AHB1ENR |= RCC_AHB1ENR_IOPCEN;
+		RCC_AHB1ENR |= RCC_AHB1ENR_IOPAEN;
 		RCC_APB1ENR |= RCC_APB1ENR_SPI2EN;
 
 		gpio_set_output_options(LED_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_100MHZ, LED_PIN);
@@ -129,7 +129,7 @@ struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool
 		}
 	}
 
-	flawless::ApplicationConfig<RGBConfigs> mRGBBuffer{"led_values", "15I", this};
+	flawless::ApplicationConfig<RGBConfigs> mRGBBuffer{"led.values", "15I", this};
 	Array<uint8_t, PREAMBLE_BYTES + bytesToSubstituteCnt(NUM_LEDS * 3)> mOutputBuffer;
 	uint8_t *mOutBufferAfterPreamble {0};
 } ledModule(9);

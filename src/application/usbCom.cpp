@@ -131,7 +131,6 @@ struct USBComModule : public flawless::Module, public flawless::PhyInterface, pu
 	volatile systemTime_t packetTimeout;
 	volatile uint16_t mCurPacketLen {0};
 	volatile bool mSending {false};
-};
+}USBModule(3);
 
-USBComModule USBtestModule(3);
 }

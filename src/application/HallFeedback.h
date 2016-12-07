@@ -8,15 +8,17 @@
 namespace hall {
 
 struct Timeout {
-	float    delaySinceLastTick;
+	uint64_t delaySinceLastTickUS;
 	int      currentHallValues;
 	int      currentPos; // state indicates the angle and ranges from 0 to 11
+	bool     movingCW;   // true if the motor previously moved clockwise false otherwise
 };
 
 struct Tick {
-	float    prevTickDelay;
+	uint64_t prevTickDelayUS;
 	int      currentHallValues;
 	int      currentPos; // state indicates the angle and ranges from 0 to 11
+	bool     movingCW; // true if the motor moves clockwise false otherwise
 };
 
 int getNextStep(int curStep, bool cw);
