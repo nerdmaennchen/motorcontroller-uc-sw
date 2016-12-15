@@ -104,6 +104,7 @@ struct HallManager : public flawless::Module {
 					msg->delaySinceLastTickUS = mDelaySinceLastTick * (1000000 / TickTimerFrequency);
 					msg->currentPos           = mCurrentPos;
 					msg->movingCW             = mMovingCW;
+					msg->moving               = mMoving;
 					msg.post();
 				}
 			}
@@ -127,10 +128,11 @@ struct HallManager : public flawless::Module {
 			}
 			mCurrentPos = (mCurrentPos+12) % 12;
 			mHallStates = state;
+			mTimeOfLastTick = now;
 			if (validTransition && mMovingCW == newMoveCW) {
+				mMoving = true;
 				mPrevTickDelay = mDelaySinceLastTick;
 //				mDelaySinceLastTick = 0;
-				mTimeOfLastTick = now;
 
 				auto msg = flawless::getFreeMessage<hall::Tick>();
 				if (msg) {
@@ -138,8 +140,11 @@ struct HallManager : public flawless::Module {
 					msg->prevTickDelayUS      = mPrevTickDelay;
 					msg->currentPos           = mCurrentPos;
 					msg->movingCW             = newMoveCW;
+					msg->moving               = mMoving;
 					msg.post();
 				}
+			} else {
+				mMoving = false;
 			}
 			mMovingCW = newMoveCW;
 		}
@@ -155,6 +160,7 @@ struct HallManager : public flawless::Module {
 	int64_t  mInvalidTransitions    ;
 	uint64_t mTicksCaptured         {0ULL};
 	bool     mMovingCW              {true};
+	bool     mMoving                {false};
 
 
 	DebounceBuffer mRawMeasureBuffer1;
@@ -272,6 +278,7 @@ namespace
 flawless::ApplicationConfigMapping<uint64_t> mTicksCaptured       {"hall.ticks_captured",      "Q", hallManager.mTicksCaptured}; // only for debug purposes
 
 flawless::ApplicationConfigMapping<uint64_t> mDelaySinceLastTick  {"hall.delay",               "Q", hallManager.mDelaySinceLastTick};
+flawless::ApplicationConfigMapping<bool>     mMoving              {"hall.moving",              "B", hallManager.mMoving};
 flawless::ApplicationConfigMapping<uint64_t> mPrevTickDelay       {"hall.delay_prev",          "Q", hallManager.mPrevTickDelay};
 flawless::ApplicationConfigMapping<int>      mHallStates          {"hall.states",              "I", hallManager.mHallStates};
 flawless::ApplicationConfigMapping<int>      mHallPhase           {"hall.phase",               "I", hallManager.mCurrentPos};

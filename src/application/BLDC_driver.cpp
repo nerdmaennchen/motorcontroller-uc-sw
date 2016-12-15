@@ -3,6 +3,7 @@
 #include "HallFeedback.h"
 
 #include "controller/PIDController.h"
+#include "controller/DecayController.h"
 
 #include <flawless/core/Message.h>
 #include <flawless/applicationConfig/ApplicationConfig.h>
@@ -33,25 +34,26 @@ struct BLDC_driver final :
 	static constexpr int StepsPerPhase = StepsCount / 6;
 
 	bool mEnabled {false};
-	PIDController mController
+	PIDController mSpeedController
 	{
 	    	0.f,
 			0.f,
 			0.f,
-			5e-5f,  // default P
-			1.e-2f, // default I
+			1e-6f,  // default P
+			5.e-3f, // default I
 			0.f,    // default D
 			0.f, 0.f, 0.f
 	};
-//	{
-//	    	0.f,
-//			0.f,
-//			0.f,
-//			1.e-2f, // default P
-//			2.e-3f,  // default I
-//			2.6e-4f, // default D
-//			0.f, 0.f, 0.f
-//	};
+
+	DecayController mCurrentController
+	{
+	    	0.f,
+			0.f,
+			0.f,  // default P
+			1.e-3f, // default I
+			1.e-2f, // decay
+			0.f, 0.f
+	};
 
 
 	float    mOutput2Advance                {1e-2f};
@@ -71,6 +73,8 @@ struct BLDC_driver final :
 
 	float mMaxCurrent                    {.88f}; // maximum current the motor can handle in A
 	float mShutoffMaxCurrent             {1.5f}; // maximum current the motor can handle in A
+
+	float mPWMFrequency                  {pwmdriver::pwm_target_freq};
 
 	pwmdriver::Driver* driver {nullptr};
 	BLDC_driver(unsigned int level) : flawless::Module(level) {}
@@ -140,27 +144,31 @@ struct BLDC_driver final :
 		mEnabled = enable;
 		if (enable) {
 			driver->claim(this);
-			mController.errorP = 0;
-			mController.errorI = 0;
+			mSpeedController.errorP = 0;
+			mSpeedController.errorI = 0;
 			TIM_BDTR(PWM_TIMER) |= TIM_BDTR_MOE;
 			mLastUpdateTime = time.getSystemTimeUS();
 		} else {
 			TIM_BDTR(PWM_TIMER) &= ~TIM_BDTR_MOE;
 			driver->claim(nullptr);
+			mTargetTickFrequency = 0.f;
 		}
 	}
 
 	void setTargetFrequency(float target_frequency) {
 		mTargetDirCW = target_frequency >= 0;
 		if (sgn(mTargetTickFrequency) != sgn(target_frequency)) {
-			mController.errorI = 0;
+			mSpeedController.errorI = 0;
 		}
 		mTargetTickFrequency = target_frequency * 6;
 	}
 
 
+	systemTime_t mLastCurrentMeasurement;
 	void callback(flawless::Message<CurrentMeasurement> const& current) {
-		mCurrentError = std::abs(current->current) - mMaxCurrent;
+		systemTime_t now = time.getSystemTimeUS();
+		mCurrentError = mCurrentController.update(std::max(std::abs(current->current) - mMaxCurrent, 0.f), now - mLastCurrentMeasurement);
+		mLastCurrentMeasurement = now;
 		mCurrentError = std::max(0.f, mCurrentError);
 		if (current->current > mShutoffMaxCurrent) {
 			TIM_BDTR(PWM_TIMER) &= ~TIM_BDTR_MOE;
@@ -178,10 +186,13 @@ struct BLDC_driver final :
 			float dT = (now - mLastUpdateTime) * 1.e-6f;
 			dT = std::max(1e-6, dT);
 			mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / (state->delaySinceLastTickUS);
+			if (not state->moving) {
+				mTickSpeed = 0;
+			}
 			mSpeed = mTickSpeed / 6.f;
 			float e  = mTargetTickFrequency - mTickSpeed;
 			mLastUpdateTime = now;
-			mControl = mController.update(e, dT);
+			mControl = mSpeedController.update(e, dT);
 
 			setDutcyCycle(std::max(0.f, std::abs(mControl) - mCurrentError));
 
@@ -190,7 +201,7 @@ struct BLDC_driver final :
 			if (mControl < 0) {
 				stepStart = 3 * StepsCount - stepStart;
 			}
-			driver->runSteps(stepStart, StepsPerPhase, 0, false);
+			driver->runSteps(stepStart, 1, 0, false);
 		}
 	}
 
@@ -200,11 +211,17 @@ struct BLDC_driver final :
 			systemTime_t now = time.getSystemTimeUS();
 			float dT = (now - mLastUpdateTime) * 1.e-6f;
 			dT = std::max(1e-6f, dT);
-			mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / (state->prevTickDelayUS);
+			int delay = state->prevTickDelayUS;
+			mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / delay;
+			if (not state->moving) {
+				delay = 0;
+				mTickSpeed = 0;
+			}
+
 			mSpeed = mTickSpeed / 6.f;
 			float e  = mTargetTickFrequency - mTickSpeed;
 			mLastUpdateTime = now;
-			mControl = mController.update(e, dT);
+			mControl = mSpeedController.update(e, dT);
 
 			setDutcyCycle(std::max(0.f, std::abs(mControl) - mCurrentError));
 
@@ -213,16 +230,20 @@ struct BLDC_driver final :
 			if (not state->movingCW) {
 				stepStart = 3 * StepsCount - stepStart;
 			}
-			driver->runSteps(stepStart, StepsPerPhase, state->prevTickDelayUS / StepsPerPhase, false);
+			driver->runSteps(stepStart, StepsPerPhase, delay / StepsPerPhase, false);
 		}
 	}
 
 	void setDutcyCycle(float scale) {
 		flawless::LockGuard lock;
 		uint32_t arr = int(pwmdriver::PwmPreOffTimer + pwmdriver::PwmAmplitude / scale);
-		arr = std::max(arr, pwmdriver::PwmMinCyclePeriod);
-		arr = std::min(arr, uint32_t(pwmdriver::pwm_timer_base_freq / pwmdriver::pwm_target_freq));
-		uint32_t psc = int(pwmdriver::pwm_timer_base_freq / (pwmdriver::pwm_target_freq * (arr)));
+		if (arr > pwmdriver::PwmMinCyclePeriod) {
+			TIM_BDTR(PWM_TIMER) &= TIM_BDTR_MOE; // this is the same as arr = infinity since the pwm is effectively turned off
+		} else {
+			TIM_BDTR(PWM_TIMER) |= TIM_BDTR_MOE;
+		}
+		arr = std::min(arr, uint32_t(pwmdriver::pwm_timer_base_freq / mPWMFrequency));
+		uint32_t psc = int(pwmdriver::pwm_timer_base_freq / (mPWMFrequency * (arr)));
 		if (psc > 0) {
 			psc -= 1;
 		}
@@ -264,6 +285,8 @@ struct : public flawless::Callback<float&, bool> {
 	}
 } targetFrequencyHelper;
 
+
+
 flawless::ApplicationConfigMapping<float> cfgMaxMotorCurrent                {"motor.max_motor_current",    "f", driver.mMaxCurrent};
 
 //flawless::ApplicationConfigMapping<float> cfgFreq2AdvanceB2                 {"motor.outp_2_advance",       "f", driver.mOutput2Advance};
@@ -275,15 +298,28 @@ flawless::ApplicationConfigMapping<float> cfgSpeedInnovation                {"mo
 flawless::ApplicationConfigMapping<float> cfgTargetPhase                    {"motor.target_phase",         "f", driver.mTargetPhase};
 flawless::ApplicationConfigMapping<float> cfgMinControlOutput               {"motor.min_controll_output",  "f", driver.mMinControlOutput};
 
-flawless::ApplicationConfigMapping<float> cfgControllerEP                   {"motor.controller.ep",         "f", driver.mController.errorP};
-flawless::ApplicationConfigMapping<float> cfgControllerEI                   {"motor.controller.ei",         "f", driver.mController.errorI};
-flawless::ApplicationConfigMapping<float> cfgControllerED                   {"motor.controller.ed",         "f", driver.mController.errorD};
+flawless::ApplicationConfigMapping<float> cfgControllerEP                   {"motor.controller.ep",         "f", driver.mSpeedController.errorP};
+flawless::ApplicationConfigMapping<float> cfgControllerEI                   {"motor.controller.ei",         "f", driver.mSpeedController.errorI};
+flawless::ApplicationConfigMapping<float> cfgControllerED                   {"motor.controller.ed",         "f", driver.mSpeedController.errorD};
 
-flawless::ApplicationConfigMapping<float> cfgControllerOP                   {"motor.controller.op",         "f", driver.mController.outputP};
-flawless::ApplicationConfigMapping<float> cfgControllerOI                   {"motor.controller.oi",         "f", driver.mController.outputI};
-flawless::ApplicationConfigMapping<float> cfgControllerOD                   {"motor.controller.od",         "f", driver.mController.outputD};
+flawless::ApplicationConfigMapping<float> cfgControllerOP                   {"motor.controller.op",         "f", driver.mSpeedController.outputP};
+flawless::ApplicationConfigMapping<float> cfgControllerOI                   {"motor.controller.oi",         "f", driver.mSpeedController.outputI};
+flawless::ApplicationConfigMapping<float> cfgControllerOD                   {"motor.controller.od",         "f", driver.mSpeedController.outputD};
 
-flawless::ApplicationConfigMapping<float> cfgControllerP                    {"motor.controller.p",          "f", driver.mController.controllP};
-flawless::ApplicationConfigMapping<float> cfgControllerI                    {"motor.controller.i",          "f", driver.mController.controllI};
-flawless::ApplicationConfigMapping<float> cfgControllerD                    {"motor.controller.d",          "f", driver.mController.controllD};
+flawless::ApplicationConfigMapping<float> cfgControllerP                    {"motor.controller.p",          "f", driver.mSpeedController.controllP};
+flawless::ApplicationConfigMapping<float> cfgControllerI                    {"motor.controller.i",          "f", driver.mSpeedController.controllI};
+flawless::ApplicationConfigMapping<float> cfgControllerD                    {"motor.controller.d",          "f", driver.mSpeedController.controllD};
+
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerEP            {"motor.currentcontroller.ep",  "f", driver.mCurrentController.errorP};
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerEI            {"motor.currentcontroller.ei",  "f", driver.mCurrentController.errorI};
+
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerOP            {"motor.currentcontroller.op",  "f", driver.mCurrentController.outputP};
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerOI            {"motor.currentcontroller.oi",  "f", driver.mCurrentController.outputI};
+
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerP             {"motor.currentcontroller.p",   "f", driver.mCurrentController.controllP};
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerI             {"motor.currentcontroller.i",   "f", driver.mCurrentController.controllI};
+flawless::ApplicationConfigMapping<float> cfgCurrentControllerDecay         {"motor.currentcontroller.dec", "f", driver.mCurrentController.decay};
+
+flawless::ApplicationConfigMapping<float> cfgPWMFrequency                   {"pwm.frequency",               "f", driver.mPWMFrequency};
+
 }

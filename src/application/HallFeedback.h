@@ -12,6 +12,7 @@ struct Timeout {
 	int      currentHallValues;
 	int      currentPos; // state indicates the angle and ranges from 0 to 11
 	bool     movingCW;   // true if the motor previously moved clockwise false otherwise
+	bool     moving;     // true if the motor is moving (if at least two ticks in the same direction happened)
 };
 
 struct Tick {
@@ -19,6 +20,7 @@ struct Tick {
 	int      currentHallValues;
 	int      currentPos; // state indicates the angle and ranges from 0 to 11
 	bool     movingCW; // true if the motor moves clockwise false otherwise
+	bool     moving;     // true if the motor is moving (if at least two ticks in the same direction happened)
 };
 
 int getNextStep(int curStep, bool cw);

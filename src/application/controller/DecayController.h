@@ -1,29 +1,24 @@
 #pragma once
 
+
 #include <flawless/applicationConfig/ApplicationConfig.h>
 #include <algorithm>
 
-struct PIDController final
+struct DecayController final
 {
 	float errorP;
 	float errorI;
-	float errorD;
 
 	float controllP;
 	float controllI;
-	float controllD;
+
+	float decay;
 
 	float outputP;
 	float outputI;
-	float outputD;
 
 	float update(float error, float dT) {
-		if (dT) {
-			errorD = (error - errorP) / dT;
-			errorI += error * dT;
-		} else {
-			errorD = 0.f;
-		}
+		errorI = (1-decay) * errorI + decay * (error * dT);
 		errorP = error;
 
 		if (controllI) {
@@ -33,8 +28,7 @@ struct PIDController final
 
 		outputP = errorP * controllP;
 		outputI = errorI * controllI;
-		outputD = errorD * controllD;
 
-		return outputP + outputI + outputD;
+		return outputP + outputI;
 	}
 };

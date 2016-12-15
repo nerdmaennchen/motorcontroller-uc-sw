@@ -4,7 +4,7 @@ import time
 import random
 
 def flush(vals):
-	setConfig(dev, configs, "led_values", tuple(vals), False)
+	setConfig(dev, configs, "led.values", tuple(vals), False)
 
 def fade():
 	while True:
@@ -26,11 +26,11 @@ def randomStuff():
 		if idx >= numLEDs:
 			idx = 0
 		ledArr[idx] = random.randint(0, 0xffffff) #0xff0000
-		setConfig(dev, configs, "led_values", tuple(ledArr), False)
+		setConfig(dev, configs, "led.values", tuple(ledArr), False)
 		time.sleep(.01)
 	
 def lauflicht():
-	numLEDs = int(configs["led_values"][1] / 4)
+	numLEDs = int(configs["led.values"][1] / 4)
 	ledArr = [0] * numLEDs
 	idx = 0
 	while True:
@@ -39,7 +39,7 @@ def lauflicht():
 		if idx >= numLEDs:
 			idx = 0
 		ledArr[idx] = 0xff0000
-		setConfig(dev, configs, "led_values", tuple(ledArr), False)
+		setConfig(dev, configs, "led.values", tuple(ledArr), False)
 		time.sleep(.01)
 
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
 	dev.set_configuration()
 	configs = fetchConfig(dev)
-	numLEDs = int(configs["led_values"][1] / 4)
+	numLEDs = int(configs["led.values"][1] / 4)
 	
-	randomStuff()
+	fade()
 

@@ -11,11 +11,11 @@ namespace pwmdriver
 
 #define PWM_TIMER TIM1
 constexpr float pwm_timer_base_freq = float(CLOCK_APB2_TIMER_CLK);
-constexpr float pwm_target_freq     = float(35.e3f); // a frequency well outside the audible range
+constexpr float pwm_target_freq     = float(20.e3f); // a frequency well outside the audible range
 
 // off time is before the PWM and after to there is always a PWM_OFF_TIME*2 off time between two consecutive PWM pulses
 constexpr uint32_t PwmPreOffTimer       = 8; // has to be something more than zero to enable a timeframe to fetch hall data via DMA
-constexpr uint32_t PwmAmplitude         = 120;
+constexpr uint32_t PwmAmplitude         = 64;
 
 constexpr uint32_t PwmCentralDutyMoment = PwmPreOffTimer + PwmAmplitude / 2;
 constexpr uint32_t PwmMinCyclePeriod    = PwmPreOffTimer + PwmAmplitude;

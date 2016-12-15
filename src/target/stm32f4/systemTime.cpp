@@ -29,7 +29,9 @@ void tim1_brk_tim9_isr()
 {
 //	ISRTime isrTimer;
 	flawless::LockGuard lock;
-	g_systemTimeHighPart += 1;
+	if (TIM_SR(SYSTEM_TIME_TIMER) & TIM_SR_UIF) {
+		g_systemTimeHighPart += 1;
+	}
 	TIM_SR(SYSTEM_TIME_TIMER) = 0;
 }
 }
