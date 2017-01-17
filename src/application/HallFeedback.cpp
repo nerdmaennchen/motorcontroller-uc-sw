@@ -127,8 +127,10 @@ struct HallManager : public flawless::Module {
 				++mInvalidTransitions;
 			}
 			mCurrentPos = (mCurrentPos+12) % 12;
-			mHallStates = state;
-			mTimeOfLastTick = now;
+			if (validTransition) {
+				mHallStates = state;
+				mTimeOfLastTick = now;
+			}
 			if (validTransition && mMovingCW == newMoveCW) {
 				mMoving = true;
 				mPrevTickDelay = mDelaySinceLastTick;
