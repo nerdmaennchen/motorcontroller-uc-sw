@@ -12,6 +12,10 @@
 #include <libopencm3/stm32/f4/dma.h>
 
 
+/**
+ * some helper to build strings from constexpressions
+ */
+
 namespace
 {
 
@@ -36,24 +40,26 @@ constexpr uint32_t LED_DMA_STREAM  = DMA_STREAM_4;
 constexpr uint32_t LED_DMA_CHANNEL = 0;
 
 constexpr uint32_t PREAMBLE_BYTES = 20;
-constexpr uint32_t NUM_LEDS = 15;
+
+constexpr uint32_t NUM_LEDS_FRONT = 10;
+constexpr uint32_t NUM_LEDS_BACK  = 11;
+constexpr uint32_t NUM_LEDS = NUM_LEDS_FRONT + NUM_LEDS_BACK;
 
 constexpr uint8_t LED_ONE_SUBSTITUTE  = 0xe;
 constexpr uint8_t LED_ZERO_SUBSTITUTE = 0x8;
 
-using RGBConfigs = Array<rgb_t, NUM_LEDS>;
-
-struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool>
+struct LEDModule : public flawless::Module
 {
-
 	LEDModule(unsigned int level) : flawless::Module(level) {}
 
 	void init(unsigned int) override {
-		mOutBufferAfterPreamble = &(mOutputBuffer[PREAMBLE_BYTES]);
+		mOutBufferFront = &(mOutputBuffer[PREAMBLE_BYTES]);
+		mOutBufferBack  = mOutBufferFront + bytesToSubstituteCnt(NUM_LEDS_FRONT*3);
+		for (uint32_t i(PREAMBLE_BYTES); i < mOutputBuffer.size(); ++i) {
+			mOutputBuffer[i] = LED_ZERO_SUBSTITUTE | LED_ZERO_SUBSTITUTE << 4;
+		}
 		setupSPI();
 		setupDMA();
-
-		callback(mRGBBuffer.get(), true);
 	}
 
 	void setupDMA(void)
@@ -66,11 +72,8 @@ struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool
 		}
 		DMA_HIFCR(LED_DMA) = (DMA_HISR(LED_DMA) & (0x3d << 0));
 
-		/* the size of a dma transfer is the size of one layer */
 		DMA_SM0AR(LED_DMA, LED_DMA_STREAM) = (uint32_t)mOutputBuffer.data();
 		DMA_SNDTR(LED_DMA, LED_DMA_STREAM) = mOutputBuffer.size();
-
-		/* set the current layer as source of the dma */
 		DMA_SPAR(LED_DMA, LED_DMA_STREAM)  = (uint32_t)&SPI_DR(LED_SPI);
 
 		/* set priority*/
@@ -107,31 +110,69 @@ struct LEDModule : public flawless::Module, flawless::Callback<RGBConfigs&, bool
 		SPI_CR1(LED_SPI) |= SPI_CR1_SPE;
 	}
 
-	void callback(RGBConfigs&, bool) override {
-		uint8_t *outBufPtr = mOutBufferAfterPreamble;
+	Array<uint8_t, PREAMBLE_BYTES + bytesToSubstituteCnt(NUM_LEDS * 3)> mOutputBuffer;
+	uint8_t *mOutBufferFront {nullptr};
+	uint8_t *mOutBufferBack  {nullptr};
+} ledModule(9);
 
-		for (rgb_t const& rgb : mRGBBuffer.get()) {
-			for (int j = 23; j >= 0; j -= 2) {
-				int subVal = 0;
-				if (rgb.rgb & (1 << (j))) {
-					subVal = LED_ONE_SUBSTITUTE << 4;
-				} else {
-					subVal = LED_ZERO_SUBSTITUTE << 4;
+namespace {
+using LedValuesFront = Array<rgb_t, NUM_LEDS_FRONT>;
+struct : public flawless::Callback<LedValuesFront&, bool> {
+	LedValuesFront rgbValues;
+	void callback(LedValuesFront&, bool setter) override {
+		if (setter) {
+			uint8_t *outBufPtr = ledModule.mOutBufferFront;
+			for (rgb_t const& rgb : rgbValues) {
+				for (int j = 23; j >= 0; j -= 2) {
+					int subVal = 0;
+					if (rgb.rgb & (1 << (j))) {
+						subVal = LED_ONE_SUBSTITUTE << 4;
+					} else {
+						subVal = LED_ZERO_SUBSTITUTE << 4;
+					}
+					if (rgb.rgb & (1 << (j - 1))) {
+						subVal |= LED_ONE_SUBSTITUTE;
+					} else {
+						subVal |= LED_ZERO_SUBSTITUTE;
+					}
+					*outBufPtr = subVal;
+					++outBufPtr;
 				}
-				if (rgb.rgb & (1 << (j - 1))) {
-					subVal |= LED_ONE_SUBSTITUTE;
-				} else {
-					subVal |= LED_ZERO_SUBSTITUTE;
-				}
-				*outBufPtr = subVal;
-				++outBufPtr;
 			}
 		}
 	}
+} ledFrontHelper;
+flawless::ApplicationConfigMapping<LedValuesFront> cfgLEDFrontMapping {"led.values.front", "10I", &ledFrontHelper, ledFrontHelper.rgbValues};
+}
 
-	flawless::ApplicationConfig<RGBConfigs> mRGBBuffer{"led.values", "15I", this};
-	Array<uint8_t, PREAMBLE_BYTES + bytesToSubstituteCnt(NUM_LEDS * 3)> mOutputBuffer;
-	uint8_t *mOutBufferAfterPreamble {0};
-} ledModule(9);
+namespace {
+using LedValuesBack = Array<rgb_t, NUM_LEDS_BACK>;
+struct : public flawless::Callback<LedValuesBack&, bool> {
+	LedValuesBack rgbValues;
+	void callback(LedValuesBack&, bool setter) override {
+		if (setter) {
+			uint8_t *outBufPtr = ledModule.mOutBufferBack;
+			for (rgb_t const& rgb : rgbValues) {
+				for (int j = 23; j >= 0; j -= 2) {
+					int subVal = 0;
+					if (rgb.rgb & (1 << (j))) {
+						subVal = LED_ONE_SUBSTITUTE << 4;
+					} else {
+						subVal = LED_ZERO_SUBSTITUTE << 4;
+					}
+					if (rgb.rgb & (1 << (j - 1))) {
+						subVal |= LED_ONE_SUBSTITUTE;
+					} else {
+						subVal |= LED_ZERO_SUBSTITUTE;
+					}
+					*outBufPtr = subVal;
+					++outBufPtr;
+				}
+			}
+		}
+	}
+} ledBackHelper;
+flawless::ApplicationConfigMapping<LedValuesBack> cfgLEDBackMapping {"led.values.back", "11I", &ledBackHelper, ledBackHelper.rgbValues};
+}
 
 }
