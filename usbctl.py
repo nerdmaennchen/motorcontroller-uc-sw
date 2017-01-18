@@ -13,7 +13,6 @@ def fetchConfig(dev):
 	paramHelper = st.Struct('=H')
 	(ep, l) = headerHelper.unpack(msg[0:3])
 	msg = msg[3:]
-	print(ep, l)
 	ret = collections.OrderedDict()
 	idx = 0
 	while len(msg) < l:
