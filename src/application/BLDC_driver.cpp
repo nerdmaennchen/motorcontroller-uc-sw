@@ -181,17 +181,17 @@ struct BLDC_driver final :
 	}
 
 	void callback(flawless::Message<hall::Timeout> const& state) {
+		systemTime_t now = time.getSystemTimeUS();
+		float dT = (now - mLastUpdateTime) * 1.e-6f;
+		dT = std::max(1e-6, dT);
+		mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / (state->delaySinceLastTickUS);
+		if (not state->moving) {
+			mTickSpeed = 0;
+		}
+		mSpeed = mTickSpeed / 6.f;
+		mLastUpdateTime = now;
 		if (mEnabled) {
-			systemTime_t now = time.getSystemTimeUS();
-			float dT = (now - mLastUpdateTime) * 1.e-6f;
-			dT = std::max(1e-6, dT);
-			mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / (state->delaySinceLastTickUS);
-			if (not state->moving) {
-				mTickSpeed = 0;
-			}
-			mSpeed = mTickSpeed / 6.f;
 			float e  = mTargetTickFrequency - mTickSpeed;
-			mLastUpdateTime = now;
 			mControl = mSpeedController.update(e, dT);
 
 			setDutcyCycle(std::max(0.f, std::abs(mControl) - mCurrentError));
@@ -206,21 +206,21 @@ struct BLDC_driver final :
 	}
 
 	void callback(flawless::Message<hall::Tick> const& state) {
-		if (mEnabled) {
-			// run the controller
-			systemTime_t now = time.getSystemTimeUS();
-			float dT = (now - mLastUpdateTime) * 1.e-6f;
-			dT = std::max(1e-6f, dT);
-			int delay = state->prevTickDelayUS;
-			mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / delay;
-			if (not state->moving) {
-				delay = 0;
-				mTickSpeed = 0;
-			}
+		// run the controller
+		systemTime_t now = time.getSystemTimeUS();
+		float dT = (now - mLastUpdateTime) * 1.e-6f;
+		dT = std::max(1e-6f, dT);
+		int delay = state->prevTickDelayUS;
+		mTickSpeed = (1-mSpeedInnovation) * mTickSpeed + mSpeedInnovation * ((state->movingCW)?1.e6f:-1.e6f) / delay;
+		if (not state->moving) {
+			delay = 0;
+			mTickSpeed = 0;
+		}
 
-			mSpeed = mTickSpeed / 6.f;
+		mSpeed = mTickSpeed / 6.f;
+		mLastUpdateTime = now;
+		if (mEnabled) {
 			float e  = mTargetTickFrequency - mTickSpeed;
-			mLastUpdateTime = now;
 			mControl = mSpeedController.update(e, dT);
 
 			setDutcyCycle(std::max(0.f, std::abs(mControl) - mCurrentError));
