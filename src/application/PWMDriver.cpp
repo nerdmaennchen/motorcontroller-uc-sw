@@ -187,8 +187,10 @@ struct : public flawless::Callback<bool&, bool> {
 	void callback(bool& enable, bool set) override {
 		if (set) {
 			if (enable) {
+				TIM_BDTR(PWM_TIMER) |= TIM_BDTR_MOE;
 				gpio_set(PWM_ENABLE_PORT, PWM_ENABLE_PIN);
 			} else {
+				TIM_BDTR(PWM_TIMER) &= ~TIM_BDTR_MOE;
 				gpio_clear(PWM_ENABLE_PORT, PWM_ENABLE_PIN);
 			}
 		}
