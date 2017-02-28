@@ -12,6 +12,8 @@
 #include <interfaces/clock.h>
 #include <interfaces/memory.h>
 
+#include <cstdlib>
+
 int main(void)
 {
 	clock_init();
@@ -24,7 +26,6 @@ int main(void)
 }
 
 
-#include <cstdlib>
 extern "C" {
 
 void* __dso_handle;
