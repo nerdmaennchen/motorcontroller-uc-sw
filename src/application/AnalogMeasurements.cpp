@@ -58,7 +58,7 @@ constexpr float Measurement2Voltage = 3.3f / float(ADC_Resolution);
 constexpr float ScaleFactor = Measurement2Voltage / float(Averaging);
 
 class AnalogMeasurer final
-	: public flawless::Module
+	: public flawless::Module<5>
 	, public flawless::Callback<uint16_t&, bool>
 {
 	using RawMeasurement  = Array<uint16_t, numChannels>;
@@ -69,10 +69,6 @@ class AnalogMeasurer final
 	flawless::ApplicationConfig<RawMeasurements> mRawMeasureBuffer1{"analog.buffer1", "10H"};
 	flawless::ApplicationConfig<RawMeasurements> mRawMeasureBuffer2{"analog.buffer2", "10H"};
 public:
-	AnalogMeasurer(unsigned int level) : flawless::Module(level) {}
-
-	virtual ~AnalogMeasurer() {}
-
 	systemTime_t mLastPublishTime;
 	void onDMADone() {
 		auto meanMsg = flawless::getFreeMessage<VoltageMeasure>();
@@ -195,7 +191,7 @@ public:
 	flawless::ApplicationConfig<uint16_t> enableConfig{"analog.adc_delay", "H", this, 0};
 
 
-	void init(unsigned int) override {
+	void init() override {
 		initGPIOs();
 		initDMA();
 		initAuxTimer();
@@ -204,7 +200,7 @@ public:
 //		gpio_mode_setup(DBG_TIMER_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, DBG_TIMER_PIN);
 //		gpio_set_af(DBG_TIMER_PORT, GPIO_AF2, DBG_TIMER_PIN);
 	}
-} analogMeasurement(5);
+} analogMeasurement;
 
 
 extern "C" {

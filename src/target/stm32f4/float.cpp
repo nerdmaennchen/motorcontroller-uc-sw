@@ -14,14 +14,11 @@
 namespace
 {
 
-struct SCBMod : public flawless::Module
+struct SCBMod : public flawless::Module<0>
 {
-	SCBMod(unsigned int level) : flawless::Module(level) {}
-	virtual ~SCBMod() {};
-
-	void init(unsigned int) override {
+	void init() override {
 		/* enable floating point calculation on coprocessor */
 		SCB_CPACR |= (3 << 22) | (3 << 20);
 	}
-} scbModule(0);
+} scbModule;
 }

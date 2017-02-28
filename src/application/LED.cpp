@@ -48,11 +48,9 @@ constexpr uint32_t NUM_LEDS = NUM_LEDS_FRONT + NUM_LEDS_BACK;
 constexpr uint8_t LED_ONE_SUBSTITUTE  = 0xe;
 constexpr uint8_t LED_ZERO_SUBSTITUTE = 0x8;
 
-struct LEDModule : public flawless::Module
+struct LEDModule : public flawless::Module<9>
 {
-	LEDModule(unsigned int level) : flawless::Module(level) {}
-
-	void init(unsigned int) override {
+	void init() override {
 		mOutBufferFront = &(mOutputBuffer[PREAMBLE_BYTES]);
 		mOutBufferBack  = mOutBufferFront + bytesToSubstituteCnt(NUM_LEDS_FRONT*3);
 		for (uint32_t i(PREAMBLE_BYTES); i < mOutputBuffer.size(); ++i) {
@@ -113,7 +111,7 @@ struct LEDModule : public flawless::Module
 	Array<uint8_t, PREAMBLE_BYTES + bytesToSubstituteCnt(NUM_LEDS * 3)> mOutputBuffer;
 	uint8_t *mOutBufferFront {nullptr};
 	uint8_t *mOutBufferBack  {nullptr};
-} ledModule(9);
+} ledModule;
 
 namespace {
 using LedValuesFront = Array<rgb_t, NUM_LEDS_FRONT>;

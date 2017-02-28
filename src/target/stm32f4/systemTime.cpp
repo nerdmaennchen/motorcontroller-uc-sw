@@ -61,11 +61,9 @@ void SystemTime::sleep(systemTime_t duration) const {
 
 namespace
 {
-struct InitHelper : public flawless::Module
+struct InitHelper : public flawless::Module<1>
 {
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-
-	void init(unsigned int) override
+	void init() override
 	{
 		/* Enable TIM clock. */
 		RCC_APB2ENR |= RCC_APB2ENR_TIM9EN;
@@ -86,5 +84,5 @@ struct InitHelper : public flawless::Module
 		/* enable timer */
 		TIM_CR1(SYSTEM_TIME_TIMER) |= TIM_CR1_CEN;
 	}
-} initHelper(1);
+} initHelper;
 }

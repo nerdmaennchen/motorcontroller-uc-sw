@@ -83,10 +83,9 @@ void HWTimer::setupTimer(hw_timerTicks i_ticks)
 
 namespace
 {
-struct InitHelper : public flawless::Module
+struct InitHelper : public flawless::Module<0>
 {
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-	void init(unsigned int) override {
+	void init() override {
 		/* Enable TIM clock. */
 		RCC_APB1ENR |= RCC_APB1ENR_TIM5EN;
 		/* Enable TIM interrupt. */
@@ -97,5 +96,5 @@ struct InitHelper : public flawless::Module
 		TIM_CNT(HW_TIMER) = 0U;
 		TIM_DIER(HW_TIMER) = 0U;
 	}
-} initHelper(0);
+} initHelper;
 }

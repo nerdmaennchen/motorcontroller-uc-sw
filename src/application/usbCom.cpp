@@ -4,6 +4,9 @@
 #include <flawless/protocol/PhyInterface.h>
 #include <flawless/util/FiFo.h>
 
+#include <flawless/core/MessageBufferMemory.h>
+#include <flawless/core/MessageBufferManager.h>
+
 #include <string.h>
 
 #include <interfaces/systemTime.h>
@@ -14,7 +17,7 @@ namespace
 #define COM_USB_OUT_ENDPOINT_NO (0x01)
 
 #define MAX_PACKET_SIZE 64
-#define USB_FIFO_SIZE (MAX_PACKET_SIZE * 4)
+#define USB_FIFO_SIZE (MAX_PACKET_SIZE * 1)
 
 const usb_endpoint_descriptor out_usb_ep_descriptor =
 {
@@ -40,14 +43,16 @@ const usb_endpoint_descriptor in_usb_ep_descriptor =
 	/* .extralen = */ 0,
 };
 
-struct USBComModule : public flawless::Module, public flawless::PhyInterface, public usb_ep_callback, public usb_ep_set_config_callback {
+flawless::MessageBufferMemory<UsbState, 2> usbComStateBuffer;
+
+struct USBComModule : public flawless::Module<3>, public flawless::PhyInterface, public usb_ep_callback, public usb_ep_set_config_callback {
 	USBManager& manager = USBManager::get();
 
 	flawless::FIFO<uint8_t, USB_FIFO_SIZE*2, flawless::LockGuard> mTxFifo;
 
 	SystemTime &time = SystemTime::get();
 
-	USBComModule(unsigned int level) : flawless::Module(level), flawless::PhyInterface(0) {}
+	USBComModule() : flawless::PhyInterface(0) {}
 	~USBComModule() {}
 
 	void init(unsigned int) {
@@ -59,6 +64,9 @@ struct USBComModule : public flawless::Module, public flawless::PhyInterface, pu
 		UNUSED(usbd_dev);
 		mTxFifo.clear();
 		mSending = false;
+		auto usbStateMsg = flawless::getFreeMessage<UsbState>();
+		usbStateMsg->mHostConnected = true;
+		usbStateMsg.post();
 	}
 
 	void callback(usbd_device *usbd_dev, uint8_t ep) override {
@@ -76,7 +84,7 @@ struct USBComModule : public flawless::Module, public flawless::PhyInterface, pu
 		} else {
 			if (mTxFifo.count()) {
 				mSending = true;
-				Array<uint8_t, USB_FIFO_SIZE> buf;
+				Array<uint8_t, MAX_PACKET_SIZE> buf;
 				size_t i = 0;
 				while (i < buf.size() and i < mTxFifo.count()) {
 					buf[i] = mTxFifo[i];
@@ -131,6 +139,6 @@ struct USBComModule : public flawless::Module, public flawless::PhyInterface, pu
 	volatile systemTime_t packetTimeout;
 	volatile uint16_t mCurPacketLen {0};
 	volatile bool mSending {false};
-}USBModule(3);
+}USBModule;
 
 }

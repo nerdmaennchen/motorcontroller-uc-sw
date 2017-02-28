@@ -5,14 +5,16 @@
 namespace flawless
 {
 
+struct ModuleBase : flawless::util::SortedListNode<ModuleBase> {
+	ModuleBase(int level) : SortedListNode<ModuleBase>(level) {}
+	virtual void init() {};
+};
 
-class Module : public flawless::util::LinkedListNode<Module> {
+template<int initLevel = 0>
+class Module : ModuleBase {
 public:
-	Module(unsigned int initLevel) : mInitLevel(initLevel) {}
+	Module() : ModuleBase(initLevel) {}
 	virtual ~Module() {}
-	virtual void init(unsigned int level) = 0;
-
-	const unsigned int mInitLevel;
 };
 
 void InitializeModules();

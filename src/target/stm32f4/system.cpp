@@ -47,11 +47,10 @@ void system_reset(void)
 
 namespace
 {
-struct InitHelper : public flawless::Module
+struct InitHelper : public flawless::Module<0>
 {
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-	void init(unsigned int) override {
+	void init() override {
 		g_lockCounter = 0U;
 	}
-} initHelper(0);
+} initHelper;
 }

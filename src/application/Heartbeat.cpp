@@ -34,7 +34,7 @@ Array<BlinkInstruction, 4> heartBeatSequence {{
 
 flawless::MessageBufferMemory<int, 5> intMsgBuf2;
 
-class TestModule : public flawless::Module, public flawless::Listener<int, 1>, public flawless::TimerCallback
+class TestModule : public flawless::Module<9>, public flawless::Listener<int, 1>, public flawless::TimerCallback
 {
 	flawless::Message<int> mLastMsg;
 
@@ -63,10 +63,8 @@ class TestModule : public flawless::Module, public flawless::Listener<int, 1>, p
 	}
 
 public:
-	TestModule(unsigned int level) : flawless::Module(level) {}
-	virtual ~TestModule() {};
 
-	void init(unsigned int) override {
+	void init() override {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPAEN;
 		gpio_mode_setup(LED_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED_PIN);
 		gpio_set_output_options(LED_PORT, GPIO_OTYPE_OD, GPIO_OSPEED_100MHZ, LED_PIN);
@@ -80,7 +78,7 @@ public:
 	}
 };
 
-TestModule testModule(9);
+TestModule testModule;
 
 }
 

@@ -76,8 +76,7 @@ constexpr uint32_t TickTimerBaseFrequency = CLOCK_APB1_CLK;
 constexpr uint32_t TickTimerFrequency = 1000000;
 
 namespace {
-struct HallManager : public flawless::Module {
-	HallManager(unsigned int level) : flawless::Module(level) {}
+struct HallManager : public flawless::Module<50> {
 
 	systemTime_t mTimeOfLastTick {0};
 	SystemTime const& time  {SystemTime::get()};
@@ -214,7 +213,7 @@ struct HallManager : public flawless::Module {
 		TIM_DIER(HALL_TIMER)  = TIM_DIER_CC1IE | TIM_DIER_UIE;
 	}
 
-	void init(unsigned int) override {
+	void init() override {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPAEN;
 		gpio_mode_setup(HALL_PORT, GPIO_MODE_AF, GPIO_PUPD_PULLUP, HALL_PINS);
 		gpio_set_af(HALL_PORT, GPIO_AF1, HALL_PINS);
@@ -238,7 +237,7 @@ struct HallManager : public flawless::Module {
 		initDMA();
 		initTimer();
 	}
-} hallManager(50);
+} hallManager;
 }
 
 extern "C" {

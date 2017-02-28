@@ -236,8 +236,7 @@ struct : public flawless::Callback<Array<uint16_t, 2>&, bool> {
 	flawless::ApplicationConfig<Array<uint16_t, 2>> mSpiData {"pwm.drv.read", "2H", this};
 } spiHelper;
 
-struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &, bool>{
-	InitHelper(unsigned int level) : flawless::Module(level) {}
+struct InitHelper : public flawless::Module<6>, public flawless::Callback<uint8_t &, bool>{
 
 	void initPins() {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPBEN;
@@ -360,12 +359,12 @@ struct InitHelper : public flawless::Module, public flawless::Callback<uint8_t &
 		SPI_CR1(DRV_SPI) |= SPI_CR1_SPE;
 	}
 
-	void init(unsigned int) override {
+	void init() override {
 		initPins();
 		initPWMTimer();
 		initDMA();
 		initSPI();
 	}
-} initHelper(6);
+} initHelper;
 }
 

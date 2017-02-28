@@ -23,9 +23,7 @@ constexpr uint32_t SERVO_PWM_TIMER_2 = TIM11;
 
 constexpr uint32_t SERVO_FREQUENCY_HZ = 50;
 
-struct InitHelper : public flawless::Module {
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-
+struct InitHelper : public flawless::Module<5> {
 	void initPins() {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPBEN;
 		gpio_mode_setup(SERVO_PWM_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, SERVO_PWM_PINS);
@@ -67,11 +65,11 @@ struct InitHelper : public flawless::Module {
 		TIM_CR1(SERVO_PWM_TIMER_2) |= TIM_CR1_CEN;
 	}
 
-	void init(unsigned int) override {
+	void init() override {
 		initPWMTimer();
 		initPins();
 	}
-} initHelper(5);
+} initHelper;
 
 using ServoPWMConfig = Array<uint16_t, 2>;
 struct : public flawless::Callback<ServoPWMConfig &, bool> {

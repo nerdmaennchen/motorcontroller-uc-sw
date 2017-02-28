@@ -210,10 +210,9 @@ void exti15_10_isr(void)
 
 namespace
 {
-struct InitHelper : public flawless::Module
+struct InitHelper : public flawless::Module<3>
 {
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-	void init(unsigned int) override {
+	void init() override {
 		RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
 		for (int i = 0; i < GPIO_MAX_PIN; ++i)
@@ -222,5 +221,5 @@ struct InitHelper : public flawless::Module
 			g_interruptHandles[i].info = nullptr;
 		}
 	}
-} initHelper(3);
+} initHelper;
 }

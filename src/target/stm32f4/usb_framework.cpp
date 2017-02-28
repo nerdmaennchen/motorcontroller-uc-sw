@@ -131,11 +131,9 @@ usbd_device *USBManager::getUSBDevice()
 
 namespace
 {
-struct InitHelper : public flawless::Module
+struct InitHelper : public flawless::Module<1000>
 {
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-
-	void init(unsigned int) override {
+	void init() override {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPAEN;
 		RCC_AHB2ENR |= RCC_AHB2ENR_OTGFSEN;
 
@@ -153,7 +151,7 @@ struct InitHelper : public flawless::Module
 		usbd_register_set_config_callback(g_usbd_dev, &usb_set_config_callback);
 		nvic_enable_irq(NVIC_OTG_FS_IRQ);
 	}
-} initHelper(1000);
+} initHelper;
 
 }
 

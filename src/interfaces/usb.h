@@ -8,6 +8,12 @@
 using usb_ep_callback            = flawless::Callback<usbd_device *, uint8_t>;
 using usb_ep_set_config_callback = flawless::Callback<usbd_device *, uint16_t>;
 
+/*
+ * a message that is published when a host connects or disconnects
+ */
+struct UsbState {
+	bool mHostConnected;
+};
 
 class USBManager : public flawless::util::Singleton<USBManager>
 {
@@ -16,3 +22,4 @@ public:
 
 	usbd_device *getUSBDevice();
 };
+

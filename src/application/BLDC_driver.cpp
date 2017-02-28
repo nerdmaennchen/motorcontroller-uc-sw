@@ -24,7 +24,7 @@ template <typename T> constexpr int sgn(T val) {
 constexpr float pi = 3.14159265359f;
 
 struct BLDC_driver final :
-		public flawless::Module,
+		public flawless::Module<10>,
 		public pwmdriver::DriverInterface,
 		public flawless::Listener<hall::Tick>,
 		public flawless::Listener<hall::Timeout>,
@@ -77,7 +77,6 @@ struct BLDC_driver final :
 	float mPWMFrequency                  {pwmdriver::pwm_target_freq};
 
 	pwmdriver::Driver* driver {nullptr};
-	BLDC_driver(unsigned int level) : flawless::Module(level) {}
 
 	SystemTime& time = SystemTime::get();
 	systemTime_t mLastUpdateTime;
@@ -256,14 +255,14 @@ struct BLDC_driver final :
 		buildLookupTable();
 		enable(mEnabled);
 		setTargetFrequency(0.f);
-		setDutcyCycle(2.5e-1f);
+		setDutcyCycle(1.f);
 		TIM_BDTR(PWM_TIMER) |= TIM_BDTR_MOE;
 	}
 
 	int myModulo(int a, int b) {
 		return (b + a % b) % b;
 	}
-} driver(10);
+} driver;
 
 // configuration Helpers
 

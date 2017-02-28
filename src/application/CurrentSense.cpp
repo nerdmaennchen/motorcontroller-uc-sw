@@ -73,15 +73,13 @@ struct : public flawless::Listener<VoltageMeasure, 0>
 } currentController;
 
 
-struct InitHelper : public flawless::Module{
-	InitHelper(unsigned int level) : flawless::Module(level) {}
-
-	void init(unsigned int) override {
+struct InitHelper : public flawless::Module<50> {
+	void init() override {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPBEN;
 		gpio_mode_setup(DRV_DC_CAL_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, DRV_DC_CAL_PIN);
 		gpio_clear(DRV_DC_CAL_PORT, DRV_DC_CAL_PIN);
 	}
-} initHelper(50);
+} initHelper;
 }
 
 
