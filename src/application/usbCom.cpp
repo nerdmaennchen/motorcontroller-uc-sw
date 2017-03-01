@@ -55,7 +55,7 @@ struct USBComModule : public flawless::Module<3>, public flawless::PhyInterface,
 	USBComModule() : flawless::PhyInterface(0) {}
 	~USBComModule() {}
 
-	void init(unsigned int) {
+	void init() override {
 		manager.usb_register_endpoint(&in_usb_ep_descriptor, USB_FIFO_SIZE, this , this);
 		manager.usb_register_endpoint(&out_usb_ep_descriptor, USB_FIFO_SIZE, this, nullptr);
 	}

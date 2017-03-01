@@ -250,7 +250,7 @@ struct BLDC_driver final :
 		TIM_PSC(PWM_TIMER) = psc;
 	}
 
-	void init(unsigned int) {
+	void init() override {
 		driver = &(flawless::util::Singleton<pwmdriver::Driver>::get());
 		buildLookupTable();
 		enable(mEnabled);
