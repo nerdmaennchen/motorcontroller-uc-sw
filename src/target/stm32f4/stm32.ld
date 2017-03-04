@@ -1,9 +1,9 @@
 MEMORY
 {
-	rom (rx)     : ORIGIN = 0x08000000, LENGTH = 128K
+	vector (rx)  : ORIGIN = 0x08000000, LENGTH = 16K
+	config (rw)  : ORIGIN = 0x08004000, LENGTH = 16K
+	rom (rx)     : ORIGIN = 0x08008000, LENGTH = 96K
 	ram (rwx)    : ORIGIN = 0x20000000, LENGTH = 64K
-	garbage (rw) : ORIGIN = 0x00000000, LENGTH = 1K
-	config (rw)  : ORIGIN = 0x080e0000, LENGTH = 128K
 }
 
 /* Enforce emmition of the vector table. */
@@ -18,21 +18,17 @@ SECTIONS
 			*(.text*dadd*)
 		}
 		
+        . = ORIGIN(vector);
+		.vector : {
+                KEEP(*(.vectors))     /* Vector table */
+        } >vector
+		
         . = ORIGIN(rom);
 		.text : {
-                KEEP(*(.vectors))     /* Vector table */
+                . = ALIGN(4);
                 *(.text*)       /* Program code */
                 . = ALIGN(4);
                 *(.rodata*)     /* Read-only data */
-                
-                _initModules_Begin = .;
-                KEEP(*(.moduleclasses_init_vector*))
-                _initModules_End = .;
-                
-	            _logStringsBegin = .;
-	            KEEP(*(.logStrings*))
-	            _logStringsEnd = .;
-                
                 _etext = .;
         } >rom
 
@@ -78,11 +74,6 @@ SECTIONS
                 _data = .;
                 *(.data*)       /* Read-write initialized data */
                 . = ALIGN(4);
-                
-                _application_configs_begin = .;
-                KEEP(*(.application_configs*))
-                _application_configs_end = .;
-                
                 _edata = .;
         } >ram AT > rom
         PROVIDE(_data_loadaddr = LOADADDR(.data));
@@ -95,22 +86,9 @@ SECTIONS
                 . = ALIGN(4);
                 _ebss = .;
         } >ram
-
-        .configuration (NOLOAD) : {
-                . = ALIGN(4);
-                _flashConfigRAMBegin = .;
-                KEEP(*(.applicationConfigRAM*))   /* Read-write application configuration */
-                . = ALIGN(4);
-                _flashConfigRAMEnd = .;
-        } >ram AT > config
 		
         . = ALIGN(4);
         end = .;
-        
-        .garbage : AT(ORIGIN(garbage)) 
-        {
-        	*(.*NEVER*)
-        } >garbage
 }
 
 PROVIDE(_dataAtFlash = LOADADDR(.data));

@@ -7,6 +7,7 @@
 #include <flawless/core/Listener.h>
 #include <flawless/util/Array.h>
 #include <flawless/applicationConfig/ApplicationConfig.h>
+#include <interfaces/SerialAdressableConfig.h>
 
 #include <libopencm3/stm32/f4/rcc.h>
 #include <libopencm3/stm32/f4/timer.h>
@@ -181,6 +182,7 @@ struct : public flawless::Callback<Array<uint16_t, TicksPerStep>&, bool> {
 		}
 	}
 	flawless::ApplicationConfig<Array<uint16_t, TicksPerStep>> mManualPWM {"pwm.manual", "4H", this};
+	SerialAdressableConfig pwmAdressableConfig {mManualPWM};
 } manualPWMHelper;
 
 struct : public flawless::Callback<bool&, bool> {

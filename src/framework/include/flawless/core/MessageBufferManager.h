@@ -18,7 +18,7 @@ Message<T> getFreeMessage() {
 		if (msg) {
 			return Message<T>(msg);
 		}
-		buffer = buffer->mNext;
+		buffer = buffer->getNext();
 	}
 	return Message<T>();
 }

@@ -57,7 +57,7 @@ def autoconvert(s):
             return fn(s)
         except:
             pass
-    return s
+    return s.encode('ascii')
     
 def setConfig(dev, configs, target, values, verbose=True):
 	if target in configs:
@@ -115,7 +115,7 @@ if __name__ == "__main__":
 	if len(sys.argv) == 2 and sys.argv[1] == "flush":
 		flush(dev)
 		exit(0)
-	
+
 	configs = fetchConfig(dev)
 	if len(sys.argv) == 1:
 		for k, v in sorted(configs.items()):

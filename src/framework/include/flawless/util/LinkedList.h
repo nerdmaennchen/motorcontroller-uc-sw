@@ -11,42 +11,41 @@ template<typename T>
 class LinkedListNode {
 public:
 	LinkedListNode();
-	T* mNext {nullptr};
+	T* getNext() {
+		return mNext;
+	}
 protected:
 	virtual ~LinkedListNode();
+private:
+	T* mNext {nullptr};
 };
 
 template<typename T>
-class LinkedList final : public Singleton<LinkedList<T>>{
+class LinkedList final : public Singleton<LinkedList<T>> {
 public:
-	void add(T* element) {
-		element->mNext = this->mFirst;
-		this->mFirst = element;
-	}
-
-	void remove(T* element) {
-		T **iter = &(this->mFirst);
-		while (*iter) {
-			T **next = &((*iter)->mNext);
-			if (*next == element) {
-				(*iter)->mNext = element->mNext;
-				return;
-			}
-			iter = next;
-		}
-	}
 	T* mFirst {nullptr};
 };
 
 
 template<typename T>
 LinkedListNode<T>::LinkedListNode() {
-	LinkedList<T>::get().add((T*)this);
+	LinkedList<T> &list = LinkedList<T>::get();
+	this->mNext = list.mFirst;
+	list.mFirst = reinterpret_cast<T*>(this);
 }
 
 template<typename T>
 LinkedListNode<T>::~LinkedListNode() {
-	LinkedList<T>::get().remove((T*)this);
+	LinkedList<T> &list = LinkedList<T>::get();
+	T **iter = &(list.mFirst);
+	while (*iter) {
+		T **next = &((*iter)->mNext);
+		if (*next == this) {
+			(*iter)->mNext = this->mNext;
+			return;
+		}
+		iter = next;
+	}
 }
 
 template<typename T>

@@ -23,7 +23,7 @@ class : public flawless::Listener<flawless::Packet_, MSG_ID_INCOMMING_PACKET> {
 				if (handler->mEPNum == ep) {
 					handler->handlePacket(packet->iface, &(packet->buffer[1]), packet->len - 1);
 				}
-				handler = handler->mNext;
+				handler = handler->getNext();
 			}
 		}
 	}

@@ -15,7 +15,7 @@ public:
 		Message<T> typedMsg = Message<T>(reinterpret_cast<MessageContainer<T>*>(msg));
 		while (listener) {
 			listener->callback(typedMsg);
-			listener = listener->mNext;
+			listener = listener->getNext();
 		}
 	}
 };
