@@ -148,8 +148,7 @@ struct SerialInterfaceCommon :
 	}
 
 	bool reply(void const* buffer, int len) {
-		send(buffer, len);
-		return true;
+		return send(buffer, len);
 	}
 
 	void onSendDone() {
@@ -172,43 +171,6 @@ struct SerialInterfaceCommon :
 		}
 	}
 
-} /*interfaceCommonStuff*/;
-
-struct SerialTestInterface {
-	BusState mBusState {BusState::IDLE};
-	SerialInterfaceHandler *mMasterHandler {nullptr};
-	SerialInterfaceHandler *mSlaveHandler  {nullptr};
-	void *rxBuffer;
-	int   rxBufferSize;
-
-	void resetRXBuffer() {
-	}
-
-	void setRXBuffer(void *buffer, int length) {
-		rxBuffer = buffer;
-		rxBufferSize = length;
-	}
-
-	bool reply(void const* buffer, int len) {
-		mSlaveHandler->onTXPacketDone();
-		memcpy(rxBuffer, buffer, len);
-		mMasterHandler->onRXPacketDone(rxBuffer, len);
-		return true;
-	}
-	bool send(void const* buffer, int len) {
-		mMasterHandler->onTXPacketDone();
-		mSlaveHandler->onRXPacketDone(buffer, len);
-		return true;
-	}
-
-	void onSendDone() {
-	}
-
-	void resetState() {
-	}
-
-	void onBreakReceived() {
-	}
 } interfaceCommonStuff;
 
 struct SlaveSerialInterface :
@@ -218,8 +180,7 @@ struct SlaveSerialInterface :
 	SerialAdressableConfig *mFirstSubscribed {nullptr};
 
 	void init() override {
-//		interfaceCommonStuff.mCurrentHandler = this;
-		interfaceCommonStuff.mSlaveHandler = this;
+		interfaceCommonStuff.mCurrentHandler = this;
 	}
 
 	void handleQuerry(char const* data, int payloadLen) {
@@ -251,7 +212,7 @@ struct SlaveSerialInterface :
 		interfaceCommonStuff.reply(g_txBuffer.data(), sizeof(*replyHeader));
 	}
 
-	void handleRead(char const* data, int payloadLen) {
+	void handleRead(char const*, int payloadLen) {
 		if (payloadLen != 0) {
 			return; // if we are misconfigured we don't send on the bus
 		}
@@ -337,12 +298,12 @@ struct SlaveSerialInterface :
 	}
 
 	void onTXPacketDone() override {
-		interfaceCommonStuff.resetRXBuffer();
+		interfaceCommonStuff.setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());
 	}
 
 	void onRXPacketDone(void const* packet, int recievedCnt) override {
 		PacketHeader const* header = reinterpret_cast<PacketHeader const*>(packet);
-		interfaceCommonStuff.resetRXBuffer();
+		interfaceCommonStuff.setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());
 		if (recievedCnt > 1 and header->targetID == gID and gID != 0) {
 			char const* payload = ((char const*)(packet)) + sizeof(*header);
 			int payloadLen = recievedCnt - 2;
@@ -396,12 +357,11 @@ struct MasterSerialInterface :
 
 	// only active when usb is connected
 	void callback(flawless::Message<UsbState> const& state) {
-//		if (state->mHostConnected) {
-//			interfaceCommonStuff.mCurrentHandler = this;
-//		} else {
-//			interfaceCommonStuff.mCurrentHandler = &slaveSerialInterface;
-//		}
-		interfaceCommonStuff.mMasterHandler = this;
+		if (state->mHostConnected) {
+			interfaceCommonStuff.mCurrentHandler = this;
+		} else {
+			interfaceCommonStuff.mCurrentHandler = &slaveSerialInterface;
+		}
 	}
 
 	void callback() override { // on rx timeout
@@ -426,7 +386,7 @@ struct MasterSerialInterface :
 				transactionFifo.pop(1);
 				triggerTransaction();
 			} else {
-//				this->start(5000, false);
+				this->start(5000, false);
 			}
 		}
 	}
