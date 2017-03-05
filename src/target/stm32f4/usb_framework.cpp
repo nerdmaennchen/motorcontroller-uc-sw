@@ -18,6 +18,8 @@
 #include <libopencm3/usb/cdc.h>
 #include <flawless/util/Array.h>
 
+#include <flawless/applicationConfig/PersistentApplicationConfig.h>
+
 //#include <libopencm3/cm3/scb.h>
 
 #include <string.h>
@@ -101,6 +103,8 @@ usb_config_descriptor config = {
 };
 
 
+flawless::PersistentConfiguration<Array<uint16_t, 2>> gUSBID {"usb.id", "2H", {0xcafe,0xcafe}};
+
 static void usb_set_config_callback(usbd_device *usbd_dev, uint16_t wValue);
 
 }
@@ -143,7 +147,8 @@ struct InitHelper : public flawless::Module<1000>
 
 		// setup usb stuff
 		iface.bNumEndpoints = g_num_usb_endpoints;
-
+		dev.idVendor  = gUSBID.get()[0];
+		dev.idProduct = gUSBID.get()[1];
 		g_usbd_dev = usbd_init(&otgfs_usb_driver, &dev, &config,
 				usb_strings, 3,
 				usbd_control_buffer.data(), 64);
