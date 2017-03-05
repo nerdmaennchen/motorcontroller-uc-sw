@@ -198,6 +198,7 @@ struct : public flawless::Callback<bool&, bool> {
 		}
 	}
 	flawless::ApplicationConfig<bool> mEnable {"pwm.drv.enable", "B", this};
+	SerialAdressableConfig enableAdressableConfig {mEnable};
 } drvEnableHelper;
 
 
