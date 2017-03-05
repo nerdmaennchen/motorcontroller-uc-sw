@@ -35,6 +35,7 @@ namespace
 Array<char, 512> g_rxBuffer;
 Array<char, 512> g_txBuffer;
 flawless::PersistentConfiguration<uint8_t> gID {"serial.communication.id", "B", 1};
+flawless::PersistentConfiguration<uint8_t> gSlaveOnly {"serial.communication.slaveonly", "B", 0};
 
 enum class InstructionType : uint8_t {
 	QUERRY           = 0, // Request a description of a publishable
@@ -63,7 +64,7 @@ struct QuerryReply {
 struct QueryResponsePacket {
 	PacketHeader header;
 	QuerryReply queryReply;
-};
+} __attribute__((packed));
 
 struct SerialInterfaceHandler {
 	virtual void onTXPacketDone() = 0;
@@ -74,6 +75,8 @@ struct SerialInterfaceCommon :
 		public flawless::Module<9> {
 	BusState mBusState {BusState::IDLE};
 	SerialInterfaceHandler *mCurrentHandler {nullptr};
+	int currentReceiveLen {0};
+	void *currentReceiveBuffer {nullptr};
 
 	void init() override {
 		RCC_AHB1ENR |= RCC_AHB1ENR_IOPAEN;
@@ -87,7 +90,7 @@ struct SerialInterfaceCommon :
 
 		// init uart
 		USART_BRR(COM_UART) = CLOCK_APB1_CLK / COM_SPEED;
-		USART_CR1(COM_UART) |= USART_CR1_RE | USART_CR1_TE;
+		USART_CR1(COM_UART) |= USART_CR1_RE | USART_CR1_TE | USART_CR1_TCIE;
 		USART_CR2(COM_UART) |= USART_CR2_LBDIE;
 		USART_CR3(COM_UART) |= USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_HDSEL;
 
@@ -102,19 +105,15 @@ struct SerialInterfaceCommon :
 
 		/********* TX DMA **********/
 		/* set channel */
-		DMA_SCCR(COM_DMA, COM_DMA_TX_STREAM)  = COM_DMA_TX_CHANNEL << DMA_CR_CHSEL_LSB | DMA_CR_DIR | DMA_CR_MINC | DMA_CR_TCIE;
+		DMA_SCCR(COM_DMA, COM_DMA_TX_STREAM)  = COM_DMA_TX_CHANNEL << DMA_CR_CHSEL_LSB | DMA_CR_DIR | DMA_CR_MINC;
 		/* write to usart_dr */
 		DMA_SPAR(COM_DMA, COM_DMA_TX_STREAM)  = (uint32_t) &USART_DR(COM_UART);
-		nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
 
 		/********* RX DMA **********/
-		DMA_SCCR(COM_DMA, COM_DMA_RX_STREAM)  = COM_DMA_RX_CHANNEL << DMA_CR_CHSEL_LSB | DMA_CR_MINC | DMA_CR_CIRC;
+		DMA_SCCR(COM_DMA, COM_DMA_RX_STREAM)  = COM_DMA_RX_CHANNEL << DMA_CR_CHSEL_LSB | DMA_CR_MINC;
 		/* read from usart_dr */
 		DMA_SPAR(COM_DMA, COM_DMA_RX_STREAM)  = (uint32_t) &USART_DR(COM_UART);
-		DMA_SM0AR(COM_DMA, COM_DMA_RX_STREAM) = (uint32_t) g_rxBuffer.data();
-		DMA_SNDTR(COM_DMA, COM_DMA_RX_STREAM) = g_rxBuffer.size();
-
-		DMA_SCCR(COM_DMA, COM_DMA_RX_STREAM) |= DMA_CR_EN;
+		setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());
 
 		USART_CR1(COM_UART) |= USART_CR1_UE;
 	}
@@ -126,6 +125,8 @@ struct SerialInterfaceCommon :
 
 		DMA_HIFCR(COM_DMA) = 0x3d<<6;
 
+		currentReceiveBuffer = buffer;
+		currentReceiveLen    = length;
 		DMA_SM0AR(COM_DMA, COM_DMA_RX_STREAM) = (uint32_t) buffer;
 		DMA_SNDTR(COM_DMA, COM_DMA_RX_STREAM) = length;
 		DMA_SCCR(COM_DMA, COM_DMA_RX_STREAM) |= DMA_CR_EN;
@@ -161,13 +162,16 @@ struct SerialInterfaceCommon :
 		mBusState = BusState::IDLE;
 	}
 
-	void onBreakReceived() {
+	void onBreakReceived(bool bytePending) {
 		if (mBusState == BusState::SENDING) {
 			mBusState = BusState::IDLE;
 			mCurrentHandler->onTXPacketDone();
 		} else { // if we were not sending then we have receved something
-			int recievedCnt = g_rxBuffer.size() - DMA_SNDTR(COM_DMA, COM_DMA_RX_STREAM) - 1; // ignore the BREAK-mark
-			mCurrentHandler->onRXPacketDone(g_rxBuffer.data(), recievedCnt);
+			int recievedCnt = currentReceiveLen - DMA_SNDTR(COM_DMA, COM_DMA_RX_STREAM); // ignore the BREAK-mark
+			if (not bytePending) {
+				recievedCnt -= 1;
+			}
+			mCurrentHandler->onRXPacketDone(currentReceiveBuffer, recievedCnt);
 		}
 	}
 
@@ -357,7 +361,7 @@ struct MasterSerialInterface :
 
 	// only active when usb is connected
 	void callback(flawless::Message<UsbState> const& state) {
-		if (state->mHostConnected) {
+		if (state->mHostConnected and not gSlaveOnly.get()) {
 			interfaceCommonStuff.mCurrentHandler = this;
 		} else {
 			interfaceCommonStuff.mCurrentHandler = &slaveSerialInterface;
@@ -386,7 +390,7 @@ struct MasterSerialInterface :
 				transactionFifo.pop(1);
 				triggerTransaction();
 			} else {
-				this->start(5000, false);
+				this->start(10000, false);
 			}
 		}
 	}
@@ -434,7 +438,7 @@ struct MasterSerialInterface :
 		triggerTransaction();
 	}
 
-	void performQuerry(uint8_t targetID, char* descriptor, void* responseBuffer = nullptr, int responseBufferSize = 0, ResponseCallback* cb = nullptr) {
+	void performQuery(uint8_t targetID, char* descriptor, void* responseBuffer = nullptr, int responseBufferSize = 0, ResponseCallback* cb = nullptr) {
 		Transaction transaction;
 		int payloadLen = strlen(descriptor);
 		transaction.header.targetID    = targetID;
@@ -547,11 +551,11 @@ struct : public flawless::Callback<QuerryInfo&, bool> {
 		if (set) {
 			mQuerryOBuf->queryReply.dataSize = 0xff;
 			mQuerryOBuf->queryReply.index    = 0xff;
-			masterSerialInterface.performQuerry(info.targetID, info.descriptor.data(), &(mQuerryOBuf.get()), sizeof(mQuerryOBuf.get()));
+			masterSerialInterface.performQuery(info.targetID, info.descriptor.data(), &(mQuerryOBuf.get()), sizeof(mQuerryOBuf.get()));
 		}
 	}
-	flawless::ApplicationConfig<QuerryInfo>  mSetBuf {"serial.interface.querry", "B60s", this};
-	flawless::ApplicationConfig<QueryResponsePacket> mQuerryOBuf {"serial.interface.querry.reply", "4B", {{0xff, InstructionType::QUERRY}, {0xff, 0xff}}};
+	flawless::ApplicationConfig<QuerryInfo>  mSetBuf {"serial.interface.query", "B60s", this};
+	flawless::ApplicationConfig<QueryResponsePacket> mQuerryOBuf {"serial.interface.query.reply", "4B", {{0xff, InstructionType::QUERRY}, {0xff, 0xff}}};
 } querryHelper;
 
 struct SetInfo {
@@ -607,7 +611,6 @@ struct : public flawless::Callback<void> {
 	flawless::ApplicationConfig<Array<char, 512>> mSubscriptionBuffer {"serial.interface.subscriptions.fetched", "512B"};
 } singleFetchSubscriptionsHelper;
 
-
 }
 
 
@@ -615,18 +618,17 @@ struct : public flawless::Callback<void> {
 extern "C" {
 
 void usart2_isr() {
-	int sr = USART_SR(COM_UART);
-	if (sr & USART_SR_LBD) {
-		interfaceCommonStuff.onBreakReceived();
-	}
-	USART_SR(COM_UART) = 0;
-}
-
-void dma1_stream6_isr() // tx stream
-{
 	ISRTime isrTimer;
-	DMA_HIFCR(COM_DMA) = 0x3d<<16;
-	interfaceCommonStuff.onSendDone();
+	int sr = USART_SR(COM_UART);
+	USART_SR(COM_UART) = 0;
+	if (sr & USART_SR_LBD) {
+		if (sr & USART_SR_RXNE) {
+			(void) USART_DR(COM_UART); // flush that
+		}
+		interfaceCommonStuff.onBreakReceived(sr & USART_SR_RXNE);
+	} else if (sr & USART_SR_TC) {
+		interfaceCommonStuff.onSendDone();
+	}
 }
 
 }
