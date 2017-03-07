@@ -12,13 +12,13 @@ namespace platform
 
 class PersistentStorage : public flawless::util::Singleton<PersistentStorage> {
 public:
-	void* getMemoryBasePtr();
+	volatile void* getMemoryBasePtr();
 	int getMemorySize();
 
 	void eraseMemory();
 	void unlockMemory();
 	void lockMemory();
-	void writeData(void *targetPtr, void const* srcPtr, int size);
+	void writeData(volatile void *targetPtr, void const* srcPtr, int size);
 };
 
 }

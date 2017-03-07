@@ -16,23 +16,23 @@ struct ConfigHandle {
 	int descriptorStrLen;
 };
 
-bool handleValid(ConfigHandle const* handle) {
+bool handleValid(volatile ConfigHandle const* handle) {
 	return handle and handle->descriptorStrLen != 0 and handle->descriptorStrLen != -1 and handle->offsetTillNextHandle > handle->descriptorStrLen;
 }
 
-ConfigHandle const* findHandle(flawless::PersistentConfigBase const* config)
+volatile ConfigHandle const* findHandle(flawless::PersistentConfigBase const* config)
 {
 	long int offset = 0;
 	char const* configName = config->getName();
 	flawless::platform::PersistentStorage& persistentStorage = flawless::platform::PersistentStorage::get();
-	char const* storage = reinterpret_cast<char const*>(persistentStorage.getMemoryBasePtr());
+	volatile char const* storage = reinterpret_cast<volatile char const*>(persistentStorage.getMemoryBasePtr());
 	while (offset < persistentStorage.getMemorySize()) {
-		ConfigHandle const* handle = reinterpret_cast<ConfigHandle const*>(&(storage[offset]));
+		volatile ConfigHandle const* handle = reinterpret_cast<volatile ConfigHandle const*>(&(storage[offset]));
 		if (not handleValid(handle)) {
 			break; // bail out if not found
 		}
-		char const* descriptorString = reinterpret_cast<char const*>(handle) + sizeof(*handle);
-		if (0 == strcmp(descriptorString, configName)) {
+		volatile char const* descriptorString = reinterpret_cast<volatile char const*>(handle) + sizeof(*handle);
+		if (0 == strcmp(const_cast<const char*>(descriptorString), const_cast<const char*>(configName))) {
 			// set data accordingly
 			return handle;
 		} else {
@@ -50,14 +50,14 @@ namespace flawless
 bool PersistentConfigurationManager::dirty() const {
 	PersistentConfigBase* config = flawless::util::LinkedList<PersistentConfigBase>::get().mFirst;
 	while (config) {
-		ConfigHandle const* handle = findHandle(config);
+		volatile ConfigHandle const* handle = findHandle(config);
 		if (not handle) { // if the handle cannot be found there we are obviously dirty
 			return true;
 		}
 		// test if a value changed
-		char const* basePtr = reinterpret_cast<char const*>(handle);
-		char const* contentPtr = reinterpret_cast<char const*>(basePtr + sizeof(*handle) + handle->descriptorStrLen);
-		if (0 != memcmp(contentPtr, config->getValue(), config->getSize())) {
+		volatile char const* basePtr = reinterpret_cast<volatile char const*>(handle);
+		volatile char const* contentPtr = reinterpret_cast<volatile char const*>(basePtr + sizeof(*handle) + handle->descriptorStrLen);
+		if (0 != memcmp(const_cast<const char*>(contentPtr), config->getValue(), config->getSize())) {
 			return true;
 		}
 		config = config->getNext();
@@ -67,11 +67,11 @@ bool PersistentConfigurationManager::dirty() const {
 
 bool PersistentConfigurationManager::loadFromStorage(PersistentConfigBase *config)
 {
-	ConfigHandle const* handle = findHandle(config);
+	volatile ConfigHandle const* handle = findHandle(config);
 	if (handle) {
-		char const* basePtr = reinterpret_cast<char const*>(handle);
-		void const* srcContentPtr = reinterpret_cast<void const*>(&(basePtr[sizeof(*handle) + handle->descriptorStrLen]));
-		config->setValue(srcContentPtr);
+		volatile char const* basePtr = reinterpret_cast<volatile char const*>(handle);
+		volatile void const* srcContentPtr = reinterpret_cast<volatile void const*>(&(basePtr[sizeof(*handle) + handle->descriptorStrLen]));
+		config->setValue(const_cast<void const*>(srcContentPtr));
 		return true;
 	}
 	return false;
@@ -85,7 +85,7 @@ bool PersistentConfigurationManager::updateStorage()
 	SystemTime::get().sleep(500000); // sleep for .5 seconds to force no permanent flash writes
 	std::size_t offset = 0;
 	flawless::platform::PersistentStorage& persistentStorage = flawless::platform::PersistentStorage::get();
-	char* storage = reinterpret_cast<char*>(persistentStorage.getMemoryBasePtr());
+	volatile char* storage = reinterpret_cast<volatile char*>(persistentStorage.getMemoryBasePtr());
 	PersistentConfigBase* config = flawless::util::LinkedList<PersistentConfigBase>::get().mFirst;
 	persistentStorage.unlockMemory();
 	persistentStorage.eraseMemory();
@@ -97,9 +97,9 @@ bool PersistentConfigurationManager::updateStorage()
 			offsetTillNextHandle,
 			nameLen
 		};
-		void* dstHandlePtr  = reinterpret_cast<void*>(&(storage[offset]));
-		void* dstNamePtr    = reinterpret_cast<void*>(&(storage[offset + sizeof(handle)]));
-		void* dstContentPtr = reinterpret_cast<void*>(&(storage[offset + sizeof(handle) + handle.descriptorStrLen]));
+		volatile void* dstHandlePtr  = reinterpret_cast<volatile void*>(&(storage[offset]));
+		volatile void* dstNamePtr    = reinterpret_cast<volatile void*>(&(storage[offset + sizeof(handle)]));
+		volatile void* dstContentPtr = reinterpret_cast<volatile void*>(&(storage[offset + sizeof(handle) + handle.descriptorStrLen]));
 		persistentStorage.writeData(dstHandlePtr,  &handle,            sizeof(handle));
 		persistentStorage.writeData(dstNamePtr,    config->getName(),  nameLen);
 		persistentStorage.writeData(dstContentPtr, config->getValue(), config->getSize());

@@ -6,8 +6,8 @@
 #include <libopencm3/stm32/f4/flash.h>
 
 extern "C" {
-extern char _flashConfigROMBegin;
-extern char _flashConfigROMEnd;
+extern volatile char _flashConfigROMBegin;
+extern volatile char _flashConfigROMEnd;
 }
 
 #define SECTOR 1
@@ -26,7 +26,7 @@ namespace flawless
 namespace platform
 {
 
-void* PersistentStorage::getMemoryBasePtr()
+volatile void* PersistentStorage::getMemoryBasePtr()
 {
 	return &_flashConfigROMBegin;
 }
@@ -58,8 +58,8 @@ void PersistentStorage::lockMemory() {
 	FLASH_CR |= FLASH_LOCK;
 }
 
-void PersistentStorage::writeData(void *targetPtr, void const* srcPtr, int size) {
-	char* target    = reinterpret_cast<char*>(targetPtr);
+void PersistentStorage::writeData(volatile void *targetPtr, void const* srcPtr, int size) {
+	volatile char* target    = reinterpret_cast<volatile char*>(targetPtr);
 	char const* src = reinterpret_cast<char const*>(srcPtr);
 
 	waitForFlashOperation();
