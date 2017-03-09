@@ -38,12 +38,13 @@ flawless::PersistentConfiguration<uint8_t> gID {"serial.communication.id", "B", 
 flawless::PersistentConfiguration<uint8_t> gSlaveOnly {"serial.communication.slaveonly", "B", 0};
 
 enum class InstructionType : uint8_t {
-	QUERRY           = 0, // Request a description of a publishable
-	READ             = 1, // pubish all publishables to which there is a subscription
-	SUBSCRIBE        = 2, // subscribe to a publishable
-	SET              = 3, // set the value of (one or more) publishables
-	QUERRY_RESPONSE  = 4, // a response to a query
-	READ_RESPONSE    = 5, // the read response
+	QUERY           = 0,    // Request a description of a publishable
+	READ             = 1,    // pubish all publishables to which there is a subscription
+	SUBSCRIBE        = 2,    // subscribe to a publishable
+	SET              = 3,    // set the value of (one or more) publishables
+	QUERY_RESPONSE  = 4,    // a response to a query
+	READ_RESPONSE    = 5,    // the read response
+	INVALID          = 0xff, // marked as invalid
 };
 
 enum class BusState {
@@ -57,13 +58,13 @@ struct PacketHeader {
 	InstructionType instruction;
 } __attribute__((packed));
 
-struct QuerryReply {
+struct QueryReply {
 	uint8_t index;
 	uint8_t dataSize;
 };
 struct QueryResponsePacket {
 	PacketHeader header;
-	QuerryReply queryReply;
+	QueryReply queryReply;
 } __attribute__((packed));
 
 struct SerialInterfaceHandler {
@@ -153,7 +154,14 @@ struct SerialInterfaceCommon :
 	}
 
 	void onSendDone() {
+		if (mBusState != BusState::SENDING) {
+			return;
+		}
 		// send a break charachter to mark a packet end
+		while (DMA_SCCR(COM_DMA, COM_DMA_TX_STREAM) & DMA_CR_EN) {
+			DMA_SCCR(COM_DMA, COM_DMA_TX_STREAM) &= ~DMA_CR_EN;
+		}
+		DMA_HIFCR(COM_DMA) = 0x3d<<16;
 		USART_CR1(COM_UART) |= USART_CR1_SBK;
 	}
 
@@ -187,7 +195,7 @@ struct SlaveSerialInterface :
 		interfaceCommonStuff.mCurrentHandler = this;
 	}
 
-	void handleQuerry(char const* data, int payloadLen) {
+	void handleQuery(char const* data, int payloadLen) {
 		if (payloadLen < 2) {
 			return;
 		}
@@ -200,7 +208,7 @@ struct SlaveSerialInterface :
 				0 == strncmp(data, handle->mConfig.getName(), payloadLen)) {
 				// found the handle
 				replyHeader->header.targetID = 0;
-				replyHeader->header.instruction = InstructionType::QUERRY_RESPONSE;
+				replyHeader->header.instruction = InstructionType::QUERY_RESPONSE;
 				replyHeader->queryReply.dataSize = handle->mConfig.getSize();
 				replyHeader->queryReply.index = index;
 				interfaceCommonStuff.reply(g_txBuffer.data(), sizeof(*replyHeader));
@@ -210,7 +218,7 @@ struct SlaveSerialInterface :
 			handle = handle->getNext();
 		}
 		replyHeader->header.targetID = 0;
-		replyHeader->header.instruction = InstructionType::QUERRY_RESPONSE;
+		replyHeader->header.instruction = InstructionType::QUERY_RESPONSE;
 		replyHeader->queryReply.dataSize = 0;
 		replyHeader->queryReply.index = -1;
 		interfaceCommonStuff.reply(g_txBuffer.data(), sizeof(*replyHeader));
@@ -287,7 +295,7 @@ struct SlaveSerialInterface :
 		SerialAdressableConfig *handle = flawless::util::LinkedList<SerialAdressableConfig>::get().mFirst;
 		uint8_t index = 0;
 		uint8_t targetIndex = static_cast<uint8_t>(data[0]);
-		payloadLen -= 1; // the actual payload is a bis smaller
+		payloadLen -= 1; // the actual payload is a bit smaller
 		data += 1; // the actual payload starts here
 		while (handle) {
 			if (targetIndex == index) {
@@ -306,14 +314,21 @@ struct SlaveSerialInterface :
 	}
 
 	void onRXPacketDone(void const* packet, int recievedCnt) override {
+		Array<char, 66> rxpacketBuf;
 		PacketHeader const* header = reinterpret_cast<PacketHeader const*>(packet);
+		if (recievedCnt < 2 or recievedCnt > int(rxpacketBuf.size()) or
+			header->targetID != gID or gID == 0) {
+			interfaceCommonStuff.setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());
+			return;
+		}
+		memcpy(rxpacketBuf.data(), packet, recievedCnt);
 		interfaceCommonStuff.setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());
 		if (recievedCnt > 1 and header->targetID == gID and gID != 0) {
-			char const* payload = ((char const*)(packet)) + sizeof(*header);
+			char const* payload = ((char const*)(rxpacketBuf.data())) + sizeof(*header);
 			int payloadLen = recievedCnt - 2;
 			switch (header->instruction) {
-				case InstructionType::QUERRY:
-					handleQuerry(payload, payloadLen);
+				case InstructionType::QUERY:
+					handleQuery(payload, payloadLen);
 					break;
 				case InstructionType::READ:
 					if (payloadLen == 0) {
@@ -395,15 +410,15 @@ struct MasterSerialInterface :
 		}
 	}
 	void onRXPacketDone(void const* packet, int receivedLen) override {
-		interfaceCommonStuff.setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());;
-		if (0 == transactionFifo.count()) {
+		interfaceCommonStuff.setRXBuffer(g_rxBuffer.data(), g_rxBuffer.size());
+		if (receivedLen <= int(sizeof(PacketHeader)) or 0 == transactionFifo.count()) {
 			return; // in this case we have received something without asking for it
 		}
 		PacketHeader const* rxHeader = reinterpret_cast<PacketHeader const*>(packet);
 		PacketHeader const* txHeader = &(transactionFifo[0].header);
 		switch (rxHeader->instruction) {
-			case InstructionType::QUERRY_RESPONSE:
-				if (txHeader->instruction == InstructionType::QUERRY) {
+			case InstructionType::QUERY_RESPONSE:
+				if (txHeader->instruction == InstructionType::QUERY) {
 					if (transactionFifo[0].rxCallback) {
 						transactionFifo[0].rxCallback->callback(packet, receivedLen);
 					}
@@ -442,7 +457,7 @@ struct MasterSerialInterface :
 		Transaction transaction;
 		int payloadLen = strlen(descriptor);
 		transaction.header.targetID    = targetID;
-		transaction.header.instruction = InstructionType::QUERRY;
+		transaction.header.instruction = InstructionType::QUERY;
 		transaction.payloadLen = payloadLen;
 		transaction.rxCallback = cb;
 		memcpy(transaction.payload.data(), descriptor, strlen(descriptor)+1);
@@ -542,21 +557,36 @@ struct MasterSerialInterface :
 } masterSerialInterface;
 
 
-struct QuerryInfo {
+struct QueryInfo {
 	uint8_t targetID;
 	Array<char, 60> descriptor;
 } __attribute__((packed));
-struct : public flawless::Callback<QuerryInfo&, bool> {
-	void callback(QuerryInfo& info, bool set) override {
+struct : public flawless::Callback<QueryInfo&, bool>, public MasterSerialInterface::ResponseCallback {
+	void callback(QueryInfo& info, bool set) override {
 		if (set) {
-			mQuerryOBuf->queryReply.dataSize = 0xff;
-			mQuerryOBuf->queryReply.index    = 0xff;
-			masterSerialInterface.performQuery(info.targetID, info.descriptor.data(), &(mQuerryOBuf.get()), sizeof(mQuerryOBuf.get()));
+			mQueryOBuf->queryReply.dataSize = 0xff;
+			mQueryOBuf->queryReply.index    = 0xff;
+			mQueryOBuf->header.instruction  = InstructionType::INVALID;
+			mQueryResponseIntermediateBuffer.header.instruction  = InstructionType::INVALID;
+			mQueryResponseIntermediateBuffer.queryReply.dataSize = 0xff;
+			mQueryResponseIntermediateBuffer.queryReply.index    = 0xff;
+			masterSerialInterface.performQuery(info.targetID, info.descriptor.data(), &mQueryResponseIntermediateBuffer, sizeof(mQueryResponseIntermediateBuffer), this);
 		}
 	}
-	flawless::ApplicationConfig<QuerryInfo>  mSetBuf {"serial.interface.query", "B60s", this};
-	flawless::ApplicationConfig<QueryResponsePacket> mQuerryOBuf {"serial.interface.query.reply", "4B", {{0xff, InstructionType::QUERRY}, {0xff, 0xff}}};
-} querryHelper;
+
+	void callback(void const*, int length) {
+		if (length == sizeof(mQueryResponseIntermediateBuffer) and
+			mQueryResponseIntermediateBuffer.header.instruction == InstructionType::QUERY_RESPONSE) {
+			flawless::LockGuard lock;
+			memcpy(&(mQueryOBuf.get()), &mQueryResponseIntermediateBuffer, sizeof(mQueryResponseIntermediateBuffer));
+		}
+	}
+
+	QueryResponsePacket mQueryResponseIntermediateBuffer;
+
+	flawless::ApplicationConfig<QueryInfo>  mSubscribeBuf {"serial.interface.query", "B60s", this};
+	flawless::ApplicationConfig<QueryResponsePacket> mQueryOBuf {"serial.interface.query.reply", "4B", {{0xff, InstructionType::QUERY}, {0xff, 0xff}}};
+} queryHelper;
 
 struct SetInfo {
 	uint8_t targetID;
@@ -570,7 +600,7 @@ struct : public flawless::Callback<SetInfo&, bool> {
 			masterSerialInterface.performSet(info.targetID, info.targetIdx, info.descriptor.data(), info.payloadLen);
 		}
 	}
-	flawless::ApplicationConfig<SetInfo>  mSetBuf {"serial.interface.set", "BBB59s", this};
+	flawless::ApplicationConfig<SetInfo>  mSubscribeBuf {"serial.interface.set", "BBB59s", this};
 } setHelper;
 
 struct SubscribeInfo {
@@ -584,7 +614,7 @@ struct : public flawless::Callback<SubscribeInfo&, bool> {
 			masterSerialInterface.performSubscribe(info.targetID, info.targetIdx, info.size);
 		}
 	}
-	flawless::ApplicationConfig<SubscribeInfo>  mSetBuf {"serial.interface.subscribe", "BBB", this};
+	flawless::ApplicationConfig<SubscribeInfo>  mSubscribeBuf {"serial.interface.subscribe", "BBB", this};
 } subscribeHelper;
 
 
@@ -599,7 +629,7 @@ struct : public flawless::Callback<SingleReadInfo&, bool> {
 		}
 	}
 
-	flawless::ApplicationConfig<SingleReadInfo>   mSetBuf {"serial.interface.read.single", "BB", this};
+	flawless::ApplicationConfig<SingleReadInfo>   mSubscribeBuf {"serial.interface.read.single", "BB", this};
 	flawless::ApplicationConfig<Array<char, 64>> mResponseBuf {"serial.interface.read.single.response", "64B"};
 } singleReadHelper;
 
